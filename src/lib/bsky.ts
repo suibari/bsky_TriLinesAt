@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { session } from './auth/session';
 import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
 import { Agent, type BlobRef } from '@atproto/api';
+import { t, locale } from './i18n';
 
 // HUB_URI is the target for Global Feed aggregation via Constellation.
 // We link to the Developer's Profile Record (or a system DID) to ensure it's indexed.
@@ -43,7 +44,11 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   if (shareToBluesky) {
     // Create a summary for the post
     const summary = lines.map(l => l.text).join('\n').substring(0, 200) + '...';
-    const postText = `My 3-Line Diary for today.\n\n${summary}\n\n#TriLinesAt`;
+
+    // Get localized template and language code
+    const currentLocale = get(locale);
+    const template = get(t)('share.template');
+    const postText = `${template}\n\n${summary}\n\n#TriLinesAt`;
 
     // Using createRecord directly is more robust than agent.post helper with OAuth sessions
     const post = await agent.api.com.atproto.repo.createRecord({
@@ -53,6 +58,7 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
         $type: 'app.bsky.feed.post',
         text: postText,
         createdAt,
+        langs: [currentLocale],
       },
     });
     sharedPost = { uri: post.data.uri, cid: post.data.cid };

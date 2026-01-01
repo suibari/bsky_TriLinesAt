@@ -6,6 +6,7 @@
   import { ChevronLeft, Loader2 } from "lucide-svelte";
   import { onMount } from "svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import { t } from "$lib/i18n";
 
   $: did = $page.params.did;
   $: rkey = $page.params.rkey;
@@ -88,7 +89,8 @@
         href="/"
         class="inline-flex items-center text-slate-400 hover:text-white transition-colors gap-2"
       >
-        <ChevronLeft size={20} /> Back to Timeline
+        <ChevronLeft size={20} />
+        {$t("entry.back")}
       </a>
     </header>
 
@@ -100,7 +102,7 @@
       <DiaryCard {entry} {author} />
     {:else}
       <div class="glass-panel p-8 text-center text-red-400">
-        Entry not found.
+        {$t("entry.not_found")}
       </div>
     {/if}
   </div>

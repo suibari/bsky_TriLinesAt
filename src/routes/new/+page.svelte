@@ -10,6 +10,7 @@
     Loader2,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
+  import { t } from "$lib/i18n";
 
   // Redirect if not authed
   $: if (!$session.loading && !$session.isAuthenticated) {
@@ -80,7 +81,7 @@
     >
       <ChevronLeft size={24} />
     </a>
-    <h1 class="text-xl font-bold">New Entry</h1>
+    <h1 class="text-xl font-bold">{$t("editor.title")}</h1>
     <div class="w-8"></div>
   </header>
 
@@ -92,14 +93,14 @@
         <label
           for="line-{i}"
           class="block text-xs font-mono font-bold text-fuchsia-400 mb-2 opacity-70"
-          >LINE 0{i + 1}</label
+          >{$t(`editor.line${i + 1}` as any)}</label
         >
 
         <textarea
           id="line-{i}"
           bind:value={line.text}
           maxlength={MAX_CHARS}
-          placeholder="Write up to 50 chars..."
+          placeholder={$t("editor.placeholder")}
           class="w-full bg-transparent border-none focus:ring-0 text-lg placeholder-slate-600 resize-none h-16 leading-relaxed"
         ></textarea>
 
@@ -151,7 +152,7 @@
     <!-- Options -->
     <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
       <span class="text-sm font-medium text-slate-300"
-        >Share to Bluesky Feed</span
+        >{$t("editor.share_bluesky")}</span
       >
       <label class="relative inline-flex items-center cursor-pointer">
         <input
@@ -173,9 +174,9 @@
         disabled={!canSubmit}
       >
         {#if submitting}
-          <Loader2 class="animate-spin mr-2" /> Posting...
+          <Loader2 class="animate-spin mr-2" /> {$t("editor.submitting")}
         {:else}
-          <Send class="mr-2" size={18} /> Publish Diary
+          <Send class="mr-2" size={18} /> {$t("editor.submit")}
         {/if}
       </Button>
     </div>

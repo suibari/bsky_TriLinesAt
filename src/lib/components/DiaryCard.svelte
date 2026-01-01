@@ -7,6 +7,7 @@
   import { createEventDispatcher, onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { Heart, ExternalLink, Trash2 } from "lucide-svelte";
+  import { t } from "$lib/i18n";
 
   const dispatch = createEventDispatcher();
 
@@ -133,7 +134,7 @@
       likes = originalLikes;
       likeAvatars = originalAvatars;
       myLikeUri = originalUri;
-      alert("Action failed. Constellation indexing may be delayed.");
+      alert($t("card.action_failed"));
     } finally {
       likeLoading = false;
     }
@@ -154,12 +155,12 @@
 
   async function handleDelete(e: MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this diary entry?")) return;
+    if (!confirm($t("card.delete_confirm"))) return;
     try {
       await deleteRecord(entry.uri);
       dispatch("delete", { uri: entry.uri });
     } catch (e) {
-      alert("Failed to delete entry: " + e);
+      alert($t("card.delete_failed") + e);
     }
   }
 
@@ -207,7 +208,7 @@
         target="_blank"
         rel="noopener noreferrer"
         class="text-slate-500 hover:text-white"
-        title="View on Bluesky"
+        title={$t("card.view_on_bsky")}
         on:click|stopPropagation
       >
         <ExternalLink size={16} />
@@ -286,7 +287,7 @@
       <button
         class="ml-2 text-slate-400 hover:text-red-500 transition-colors"
         on:click={handleDelete}
-        title="Delete Entry"
+        title={$t("card.delete")}
       >
         <Trash2 size={18} />
       </button>

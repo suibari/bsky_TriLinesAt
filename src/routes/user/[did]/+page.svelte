@@ -7,6 +7,7 @@
   import { Agent } from "@atproto/api";
   import { ChevronLeft, Loader2 } from "lucide-svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import { t } from "$lib/i18n";
 
   $: did = $page.params.did;
 
@@ -80,7 +81,7 @@
       <h1 class="font-bold text-lg">
         {useProfile
           ? useProfile.displayName || useProfile.handle
-          : "Loading..."}
+          : $t("user.loading")}
       </h1>
     </div>
   </div>
@@ -110,7 +111,7 @@
           <div class="pt-2">
             <span
               class="text-xs px-2 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30"
-              >That's You</span
+              >{$t("user.thats_you")}</span
             >
           </div>
         {/if}
@@ -123,12 +124,14 @@
         >
           <span
             class="text-xs font-mono text-slate-500 uppercase tracking-widest"
-            >Diary Entries</span
+            >{$t("feed.diary_entries")}</span
           >
         </div>
 
         {#if entries.length === 0}
-          <p class="text-center text-slate-500 py-8">No entries yet.</p>
+          <p class="text-center text-slate-500 py-8">
+            {$t("feed.no_entries_yet")}
+          </p>
         {:else}
           {#each entries as entry (entry.uri)}
             <DiaryCard
@@ -143,7 +146,7 @@
       </div>
     {:else}
       <div class="text-center py-20 text-red-400">
-        User not found or error loading profile.
+        {$t("user.not_found")}
       </div>
     {/if}
   </div>

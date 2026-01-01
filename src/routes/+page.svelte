@@ -9,6 +9,7 @@
   import Avatar from "$lib/components/Avatar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { Agent } from "@atproto/api";
+  import { t, locale } from "$lib/i18n";
 
   // State
   let activeTab: "following" | "global" = "following";
@@ -134,10 +135,14 @@
   }
 
   function handleSignIn() {
-    const handle = prompt("Enter your Bluesky handle (e.g. user.bsky.social):");
+    const handle = prompt($t("auth.handle_prompt"));
     if (handle) {
       signIn(handle);
     }
+  }
+
+  function toggleLocale() {
+    locale.update((l) => (l === "en" ? "ja" : "en"));
   }
 </script>
 
@@ -152,29 +157,38 @@
         <h1
           class="text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-violet-400 to-fuchsia-400 mb-2 font-display"
         >
-          TriLinesAt
+          {$t("app.title")}
         </h1>
         <p class="text-xl text-slate-300">
-          Make journaling a habit. Share your day in 3 lines.
+          {$t("app.tagline")}
         </p>
       </div>
 
       <div
-        class="glass-panel p-8 max-w-sm w-full mx-auto transform hover:scale-105 transition-all"
+        class="glass-panel p-8 max-w-sm w-full mx-auto transform hover:scale-105 transition-all text-center"
       >
-        <div class="space-y-4">
-          <div class="w-16 h-1 w-full bg-slate-700 rounded-full"></div>
-          <div class="w-16 h-1 w-2/3 bg-slate-700 rounded-full"></div>
-          <div class="w-16 h-1 w-1/2 bg-slate-700 rounded-full"></div>
+        <div class="space-y-4 mb-6">
+          <div class="w-16 h-1 w-full bg-slate-700 mx-auto rounded-full"></div>
+          <div class="w-16 h-1 w-2/3 bg-slate-700 mx-auto rounded-full"></div>
+          <div class="w-16 h-1 w-1/2 bg-slate-700 mx-auto rounded-full"></div>
         </div>
-        <p class="mt-6 text-sm text-slate-400">
-          Connect with others who value concise expression.
+        <p class="text-sm text-slate-400">
+          {$t("app.connect")}
         </p>
       </div>
 
-      <Button variant="primary" onclick={handleSignIn}>
-        Sign in with Bluesky
-      </Button>
+      <div class="flex flex-col items-center gap-4">
+        <Button variant="primary" onclick={handleSignIn}>
+          {$t("auth.signin")}
+        </Button>
+
+        <button
+          class="text-xs text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
+          on:click={toggleLocale}
+        >
+          {$locale === "en" ? "日本語に切替" : "Switch to English"}
+        </button>
+      </div>
     </div>
   {:else}
     <!-- Authenticated App -->
@@ -184,15 +198,23 @@
         <h1
           class="text-xl font-bold font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-400 to-fuchsia-400"
         >
-          TriLinesAt
+          {$t("app.title")}
         </h1>
-        <a href="/user/{$session.did}">
-          {#if profiles[$session.did || ""]}
-            <Avatar src={profiles[$session.did!].avatar} size="sm" />
-          {:else}
-            <div class="w-8 h-8 rounded-full bg-slate-700"></div>
-          {/if}
-        </a>
+        <div class="flex items-center gap-4">
+          <button
+            class="text-[10px] px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white border border-white/5 transition-colors"
+            on:click={toggleLocale}
+          >
+            {$locale === "en" ? "JP" : "EN"}
+          </button>
+          <a href="/user/{$session.did}">
+            {#if profiles[$session.did || ""]}
+              <Avatar src={profiles[$session.did!].avatar} size="sm" />
+            {:else}
+              <div class="w-8 h-8 rounded-full bg-slate-700"></div>
+            {/if}
+          </a>
+        </div>
       </header>
 
       <!-- FAB (Floating Action Button) -->
@@ -213,7 +235,8 @@
             : 'text-slate-400 hover:text-white'}"
           on:click={loadFollowing}
         >
-          <Users size={16} /> Following
+          <Users size={16} />
+          {$t("feed.following")}
         </button>
         <button
           class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
@@ -222,7 +245,8 @@
             : 'text-slate-400 hover:text-white'}"
           on:click={loadGlobal}
         >
-          <Compass size={16} /> Global
+          <Compass size={16} />
+          {$t("feed.global")}
         </button>
       </div>
 
@@ -245,9 +269,9 @@
           </div>
         {:else if entries.length === 0}
           <div class="text-center py-12 text-slate-500">
-            <p>No entries found.</p>
+            <p>{$t("feed.no_entries")}</p>
             <p class="text-sm mt-2">
-              Try following more people or writing your first diary!
+              {$t("feed.no_entries_hint")}
             </p>
           </div>
         {:else}
