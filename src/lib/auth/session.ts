@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { Agent } from '@atproto/api';
 import { createClient } from './client';
 
@@ -122,15 +122,16 @@ export async function signIn(handle: string) {
 }
 
 export async function signOut() {
-  // client.revoke not easily available without session handle, 
-  // but we can just clear local state for now or re-init client to call revoke
-  // Simplest is to clear storage? BrowserOAuthClient manages storage.
-  // We should call client.revoke(did) if possible.
-  // For MVP, just reload or use client methods if available.
-  // Actually client.signOut() exists on the instance? No, it's specific.
-  // We'll just clear the store and maybe the agent.
-  // For proper OAuth signout we might need to hit the revocation endpoint.
-  // But simply discarding tokens is often enough for client-side.
+  const current = get(session);
+  if (current.did) {
+    try {
+      const client = await createClient();
+      await client.revoke(current.did);
+    } catch (e) {
+      console.warn("Revoke failed", e);
+    }
+  }
+
   session.set({
     agent: null,
     did: null,
