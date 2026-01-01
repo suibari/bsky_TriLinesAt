@@ -285,7 +285,7 @@
 
     {#if author && $session.isAuthenticated && $session.did === author.did}
       <button
-        class="ml-2 text-slate-400 hover:text-red-500 transition-colors"
+        class="ml-auto text-slate-400 hover:text-red-500 transition-colors"
         on:click={handleDelete}
         title={$t("card.delete")}
       >
