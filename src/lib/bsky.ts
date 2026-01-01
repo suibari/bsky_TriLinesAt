@@ -185,9 +185,26 @@ export async function getGlobalFeed() {
     const entries = await Promise.all(rawLinks.map(async (item: any) => {
       try {
         // Normalize fields (Constellation varies between 'author'/'did' and 'uri'/'rkey')
-        const did = item.author || item.did;
+        let did = item.author || item.did;
         const collection = item.collection || IDS.TriLinesEntry;
         const rkey = item.rkey || item.uri?.split('/').pop();
+
+        // Ensure DID is a DID, not a handle
+        if (did && !did.startsWith('did:')) {
+          // Try to resolve handle
+          try {
+            // We can use the public agent for resolution if needed, 
+            // but Constellation usually sends DIDs.
+            // If we really got a handle, we must resolve it to get a canonical URI.
+            const ag = new Agent('https://public.api.bsky.app'); // or bsky.social
+            const { data } = await ag.resolveHandle({ handle: did });
+            did = data.did;
+          } catch {
+            // if fail, keep as is (might fail later)
+            console.warn(`Failed to resolve handle ${did} to DID`);
+          }
+        }
+
         const uri = item.uri || `at://${did}/${collection}/${rkey}`;
 
         // If we have the full value, use it
