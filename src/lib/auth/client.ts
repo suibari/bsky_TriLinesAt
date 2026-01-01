@@ -10,7 +10,7 @@ export async function createClient() {
   const publicUrl = "https://trilinesat.suibari.com";
   const localUrl = "http://127.0.0.1:5173";
 
-  const isProd = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+  const isProd = typeof window !== 'undefined' && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
   const origin = isProd ? publicUrl : localUrl;
 
   const enc = encodeURIComponent;
