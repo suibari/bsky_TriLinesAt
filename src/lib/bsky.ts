@@ -45,13 +45,17 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
     const summary = lines.map(l => l.text).join('\n').substring(0, 200) + '...';
     const postText = `My 3-Line Diary for today.\n\n${summary}\n\n#TriLinesAt`;
 
-    // Post logic (RichText would be better for links, but simple text for MVP)
-    const post = await agent.post({
-      text: postText,
-      createdAt,
-      // We would attach a link card (external embed) here ideally
+    // Using createRecord directly is more robust than agent.post helper with OAuth sessions
+    const post = await agent.api.com.atproto.repo.createRecord({
+      repo: get(session).did!,
+      collection: 'app.bsky.feed.post',
+      record: {
+        $type: 'app.bsky.feed.post',
+        text: postText,
+        createdAt,
+      },
     });
-    sharedPost = { uri: post.uri, cid: post.cid };
+    sharedPost = { uri: post.data.uri, cid: post.data.cid };
   }
 
   // 3. Create the Custom Record
