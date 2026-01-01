@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { session, initSession, signIn } from "$lib/auth/session";
-  import { getTimeline, getFollows, getGlobalFeed } from "$lib/bsky";
+  import { getFollows, getGlobalFeed } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import { Edit3, Compass, Users } from "lucide-svelte";
@@ -53,25 +53,46 @@
       activeTab = "following";
       // 1. Get follows
       const follows = await getFollows($session.did!);
-      const followDids = follows.map((f) => f.did);
-
-      // 2. Get entries
+      const followDids = new Set(follows.map((f) => f.did));
       // Include self
-      followDids.push($session.did!);
+      followDids.add($session.did!);
 
-      const rawEntries = await getTimeline([...followDids]); // Pass clone
+      // 2. Optimization: Filter Global Feed instead of N requests
+      // This works efficiently because Constellation returns the global stream.
+      // We just pick what matches our follow list.
+      const globalPosts = await getGlobalFeed();
+
+      const filteredEntries = globalPosts.filter((entry: any) =>
+        followDids.has(entry.authorDid),
+      );
 
       // 3. Get profiles for authors
-      // Dedupe DIDs
-      const authorDids = [...new Set(rawEntries.map((e) => e.authorDid))];
+      const authorDids = [
+        ...new Set(
+          filteredEntries.map((e: any) => e.authorDid).filter(Boolean),
+        ),
+      ];
       if (authorDids.length > 0) {
-        const { data } = await $session.agent.app.bsky.actor.getProfiles({
-          actors: authorDids,
-        });
-        data.profiles.forEach((p) => (profiles[p.did] = p));
+        // Check which profiles we already have to save bandwidth
+        const missingDids = authorDids.filter(
+          (did) => !profiles[did as string],
+        );
+
+        if (missingDids.length > 0) {
+          try {
+            const { data } = await $session.agent.app.bsky.actor.getProfiles({
+              actors: missingDids as string[],
+            });
+            const newProfiles = { ...profiles };
+            data.profiles.forEach((p) => (newProfiles[p.did] = p));
+            profiles = newProfiles;
+          } catch (e) {
+            console.warn("Failed to fetch profiles", e);
+          }
+        }
       }
 
-      entries = rawEntries;
+      entries = filteredEntries;
     } catch (e) {
       console.error(e);
     } finally {
@@ -84,42 +105,27 @@
     loading = true;
     try {
       activeTab = "global";
+      // This now returns directly shaped TriLinesEntry objects from Constellation
       const posts = await getGlobalFeed();
-      // Global feed is app.bsky.feed.post with hashtag #TriLinesAt.
-      // We need to fetch the ACTUAL diary records if the post links to them?
-      // The plan says "Global Feed: Use search #TriLinesAt".
-      // Search results are Posts. The Post *content* might be the diary text.
-      // BUT our custom lexicon data might not be searchable by text content directly via app.bsky.feed.searchPosts if it's not a post.
-      // The "Share to Bluesky" creates a Post. We search for THAT Post.
-      // So we display the POSTs in the global feed?
-      // Or do we try to resolve the custom record from the post?
-      // For MVP, displaying the SEARCH RESULT (Post) is easiest, but creating a DiaryCard from it might be tricky if the Post text is just summary.
-      // Ideally we want to show DiaryCards.
-      // If the user includes a link to the entry, maybe we can parse it?
-      // For this version, let's just display the list of Posts that match, using a modified card or just standard feed style?
-      // Or: we search for posts, get the author DID, and fetch THEIR recent diary entries?
 
-      // Strategy: Parse the search results. If the post has text, show it.
-      // But we want the visual style of DiaryCard.
-      // Let's iterate search results, extract author, fetch their latest custom record.
-      // This is expensive (N requests).
+      const authorDids = [
+        ...new Set(posts.map((p: any) => p.authorDid).filter(Boolean)),
+      ] as string[];
 
-      // Alternative: Just show the user's latest entry if they appear in search.
-      // Let's simply map the search result authors to DIDs, then fetch their records.
-      const authorDids = [...new Set(posts.map((p) => p.author.did))];
-
-      // Reuse getTimeline style logic for these DIDs
-      // We want SPECIFIC entries? Or just "users who posted about it recently"?
-      // Let's fetch the entries from these authors.
-      const rawEntries = await getTimeline([...authorDids]);
-
-      // Fetch profiles
       if (authorDids.length > 0) {
-        // we have partial profiles in search results (author), can use that
-        posts.forEach((p) => (profiles[p.author.did] = p.author));
+        try {
+          const { data } = await $session.agent.app.bsky.actor.getProfiles({
+            actors: authorDids,
+          });
+          const newProfiles = { ...profiles };
+          data.profiles.forEach((p) => (newProfiles[p.did] = p));
+          profiles = newProfiles;
+        } catch (e) {
+          console.warn("Failed to fetch global profiles", e);
+        }
       }
 
-      entries = rawEntries;
+      entries = posts;
     } catch (e) {
       console.error(e);
     } finally {

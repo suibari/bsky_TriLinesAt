@@ -14,6 +14,8 @@ export interface TriLinesEntry {
     uri: string;
     cid: string;
   };
+  authorDid: string;
+  hubRef?: string; // DID of the "Hub" for global feed aggregation
 }
 
 export interface TriLinesLike {

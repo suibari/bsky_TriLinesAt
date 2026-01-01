@@ -1,7 +1,11 @@
 import { get } from 'svelte/store';
 import { session } from './auth/session';
-import { IDS, type TriLinesEntry, type TriLinesLine } from './types';
+import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
 import { Agent, type BlobRef } from '@atproto/api';
+
+// HUB_URI is the target for Global Feed aggregation via Constellation.
+// We link to the Developer's Profile Record (or a system DID) to ensure it's indexed.
+const HUB_URI = 'at://did:plc:uixgxpiqf4i63p6rgpu7ytmx/app.bsky.actor.profile/self';
 
 // Helper to get agent or throw
 function getAgent(): Agent {
@@ -54,7 +58,9 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   const record: Omit<TriLinesEntry, 'uri' | 'cid'> = {
     lines: processedLines,
     createdAt,
-    sharedPost
+    sharedPost,
+    authorDid: get(session).did!,
+    hubRef: HUB_URI
   };
 
   const res = await agent.api.com.atproto.repo.createRecord({
@@ -143,24 +149,91 @@ export async function getEntries(did: string) {
   }));
 }
 
+// HUB_URI is the target for Global Feed aggregation via Constellation.
+// We link to the Developer's Profile Record to ensure it's indexed as a valid backlink.
+
 export async function getGlobalFeed() {
-  // Global feed (Search) works on AppView.
-  // Use api.bsky.app (AppView) for public unauthenticated search to avoid CORS/Auth issues.
-  const agent = new Agent('https://api.bsky.app');
-  const { data } = await agent.app.bsky.feed.searchPosts({
-    q: '#TriLinesAt',
-    sort: 'latest',
-    limit: 30
-  });
-  return data.posts;
+  // Use Constellation to find all diary entries linking to the HUB_URI
+  const endpoint = 'https://constellation.microcosm.blue/links';
+  const url = new URL(endpoint);
+  url.searchParams.set('target', HUB_URI);
+  url.searchParams.set('collection', IDS.TriLinesEntry);
+  url.searchParams.set('path', '.hubRef');
+
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error('Constellation feed fetch failed');
+
+    const data = await res.json();
+    // Handle various Constellation response formats
+    const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
+
+    // Constellation minimal format check
+    // Some responses only give {did, collection, rkey}. We need to fetch the actual records.
+    const pdsCache: Record<string, string> = {};
+
+    const entries = await Promise.all(rawLinks.map(async (item: any) => {
+      try {
+        // Normalize fields (Constellation varies between 'author'/'did' and 'uri'/'rkey')
+        const did = item.author || item.did;
+        const collection = item.collection || IDS.TriLinesEntry;
+        const rkey = item.rkey || item.uri?.split('/').pop();
+        const uri = item.uri || `at://${did}/${collection}/${rkey}`;
+
+        // If we have the full value, use it
+        if (item.value) {
+          return {
+            ...item.value,
+            uri,
+            cid: item.cid,
+            authorDid: did,
+          };
+        }
+
+        // Otherwise, we MUST fetch it from a PDS
+        // We try to resolve the specific PDS for this user
+        let pds = pdsCache[did];
+        if (!pds) {
+          try {
+            pds = await getPds(did);
+            pdsCache[did] = pds;
+          } catch {
+            pds = 'https://bsky.social'; // Fallback
+          }
+        }
+
+        const pdsAgent = new Agent(pds);
+        const { data: record } = await pdsAgent.api.com.atproto.repo.getRecord({
+          repo: did,
+          collection: collection,
+          rkey: rkey,
+        });
+
+        return {
+          ...record.value,
+          uri: record.uri,
+          cid: record.cid,
+          authorDid: did,
+        };
+      } catch (e) {
+        console.warn("Failed to resolve global entry", e);
+        return null;
+      }
+    }));
+
+    // Filter out failed resolutions and sort
+    const posts = entries.filter(Boolean) as any[];
+    posts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return posts;
+  } catch (e) {
+    console.warn("Global feed fetch failed", e);
+    return [];
+  }
 }
 
 export async function getFollows(did: string) {
-  // Follows are usually on AppView, and often public.
-  // Use api.bsky.app for robust public fetching.
   const agent = new Agent('https://api.bsky.app');
-
-  // Just fetch first 50 for MVP to avoid rate limits
   const { data } = await agent.app.bsky.graph.getFollows({
     actor: did,
     limit: 50,
@@ -168,71 +241,62 @@ export async function getFollows(did: string) {
   return data.follows;
 }
 
-export async function getTimeline(follows: string[]) {
-  // Fetch in parallel batches
-  const results: any[] = [];
-  const batchSize = 5;
+export async function likeEntry(uri: string, cid: string) {
+  const agent = getAgent();
+  const sessionDid = get(session).did;
+  if (!sessionDid) throw new Error("Not authenticated");
 
-  // Cache PDS URLs to avoid redundant lookups (many users might be on bsky.social)
-  // Simple in-memory cache for this call
-  const pdsCache: Record<string, string> = {};
+  const record: TriLinesLike = {
+    subject: { uri, cid },
+    createdAt: new Date().toISOString()
+  };
 
-  for (console.log('Fetching batch...'); ;) {
-    const batch = follows.splice(0, batchSize);
-    if (batch.length === 0) break;
+  const { data } = await agent.api.com.atproto.repo.createRecord({
+    repo: sessionDid,
+    collection: IDS.TriLinesLike,
+    record: record as any
+  });
+  return data;
+}
 
-    const promises = batch.map(async (did) => {
-      try {
-        // Optimization: Use authed agent for self
-        const sessionDid = get(session).did;
-        if (did === sessionDid && get(session).agent) {
-          const r = await get(session).agent!.api.com.atproto.repo.listRecords({
-            repo: did,
-            collection: IDS.TriLinesEntry,
-            limit: 5
-          });
-          return { did, records: r.data.records };
-        }
+export async function unlikeEntry(uri: string) {
+  const agent = getAgent();
+  // Parse URI to get repo, collection, rkey
+  const parts = uri.split('/');
+  const rkey = parts.pop();
+  const collection = parts.pop();
+  const repo = parts.pop();
 
-        let serviceUrl = pdsCache[did];
-        if (!serviceUrl) {
-          try {
-            serviceUrl = await getPds(did);
-            pdsCache[did] = serviceUrl;
-          } catch {
-            serviceUrl = 'https://bsky.social'; // Fallback
-          }
-        }
+  if (!repo || !collection || !rkey) throw new Error("Invalid URI");
 
-        const agent = new Agent(serviceUrl);
-        const r = await agent.api.com.atproto.repo.listRecords({
-          repo: did,
-          collection: IDS.TriLinesEntry,
-          limit: 5
-        });
-        return { did, records: r.data.records };
-      } catch (e) {
-        console.warn(`Failed to fetch for ${did}`, e);
-        return { did, records: [] };
-      }
-    });
+  await agent.api.com.atproto.repo.deleteRecord({
+    repo,
+    collection,
+    rkey
+  });
+}
 
-    const chunk = await Promise.all(promises);
-    results.push(...chunk);
+export async function getEntryLikes(uri: string) {
+  if (!uri) return [];
+  // Use Constellation to find likes
+  // links?target={uri}&collection={collection}&path={path}
+  const endpoint = 'https://constellation.microcosm.blue/links';
+  const url = new URL(endpoint);
+  url.searchParams.set('target', uri);
+  url.searchParams.set('collection', IDS.TriLinesLike);
+  url.searchParams.set('path', '.subject.uri');
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    console.warn("Constellation fetch failed", res.status);
+    return [];
   }
-
-  // Flatten and sort
-  const allEntries = results.flatMap(r =>
-    r.records.map((rec: any) => ({
-      ...rec.value,
-      uri: rec.uri,
-      cid: rec.cid,
-      authorDid: r.did
-    }))
-  );
-
-  allEntries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return allEntries;
+  const data = await res.json();
+  // Constellation /links endpoint typically returns an array of links.
+  // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
+  // We handle both for robustness.
+  if (Array.isArray(data)) return data;
+  return data.linking_records || (data as any).links || [];
 }
 
 export function getBlobUrl(did: string, blob: BlobRef): string {
