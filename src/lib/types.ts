@@ -6,7 +6,9 @@ export interface TriLinesLine {
 }
 
 export interface TriLinesEntry {
-  lines: TriLinesLine[];
+  uri: string;
+  cid: string;
+  lines: { text: string; image?: BlobRef }[];
   createdAt: string;
   sharedPost?: {
     uri: string;

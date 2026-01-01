@@ -40,7 +40,7 @@ export async function createClient() {
       response_types: ['code'],
       scope,
       token_endpoint_auth_method: 'none',
-      dpop_bound_access_tokens: true,
+      dpop_bound_access_tokens: false,
     },
   });
 }

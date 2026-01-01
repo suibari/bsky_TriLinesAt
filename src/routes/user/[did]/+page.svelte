@@ -48,13 +48,10 @@
       }
 
       // 2. Get Entries
+      // getEntries returns already flattened objects with uri/cid included
       const records = await getEntries(did!);
-      // Map records to include basic info
-      entries = records.map((r: any) => ({
-        ...r.value,
-        uri: r.uri,
-        cid: r.cid,
-      }));
+      entries = records;
+
       // Sort
       entries.sort(
         (a, b) =>
@@ -134,7 +131,13 @@
           <p class="text-center text-slate-500 py-8">No entries yet.</p>
         {:else}
           {#each entries as entry (entry.uri)}
-            <DiaryCard {entry} author={useProfile} />
+            <DiaryCard
+              {entry}
+              author={useProfile}
+              on:delete={(e) => {
+                entries = entries.filter((item) => item.uri !== e.detail.uri);
+              }}
+            />
           {/each}
         {/if}
       </div>

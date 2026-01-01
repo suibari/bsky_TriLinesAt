@@ -43,7 +43,10 @@
     lines = lines;
   }
 
+  $: canSubmit = lines.every((l) => l.text.trim().length > 0) && !submitting;
+
   async function handleSubmit() {
+    if (!canSubmit) return;
     if (lines.some((l) => l.text.length > MAX_CHARS)) {
       alert("Each line must be 50 characters or less.");
       return;
@@ -165,9 +168,9 @@
     <div class="pt-4">
       <Button
         variant="primary"
-        class="w-full py-4 text-lg shadow-xl shadow-fuchsia-900/20"
+        class="w-full py-4 text-lg shadow-xl shadow-fuchsia-900/20 flex items-center justify-center gap-2"
         onclick={handleSubmit}
-        disabled={submitting}
+        disabled={!canSubmit}
       >
         {#if submitting}
           <Loader2 class="animate-spin mr-2" /> Posting...

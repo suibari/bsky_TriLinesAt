@@ -61,17 +61,41 @@ export async function initSession() {
         console.warn("Failed to resolve PDS, defaulting to bsky.social", e);
       }
 
-      // Construct Agent with explicit service URL
-      // We accept any type issues here for MVP as Agent types can be finicky
+      // Construct Agent with explicit service URL & OAuth fetch handler
+      // This ensures requests are signed/handled correctly (DPoP etc) by the OAuth lib
       const agent = new Agent({
-        service: serviceUrl
+        service: serviceUrl,
+        fetch: (url, init) => {
+          return (oauthSession as any).fetchHandler(url, init);
+        }
       });
 
       // Manually hydrate the agent session
+      let accessToken = undefined;
+      let refreshToken = undefined;
+
+      try {
+        // getTokenSet is protected but available at runtime. 
+        // We need the token string for the Agent to work in standard ways (like createRecord which uses xrpc)
+        // Agent uses `this.session.accessJwt` to set `Authorization: Bearer ...` header.
+        const tokenSet = await (oauthSession as any).getTokenSet();
+        if (tokenSet) {
+          accessToken = tokenSet.access_token;
+          refreshToken = tokenSet.refresh_token;
+        }
+      } catch (e) {
+        // Silent catch or minimal warn if needed
+      }
+
       // @ts-ignore
-      // We rely on oauthSession object structure (reference implementation does this)
-      // Accessing properties directly might have failed if they are getters or snake_case mapping is handled by class
-      agent.session = oauthSession as any;
+      agent.session = {
+        did: oauthSession.did,
+        handle: (oauthSession as any).handle || '',
+        accessJwt: accessToken || (oauthSession as any).access_token,
+        refreshJwt: refreshToken || (oauthSession as any).refresh_token,
+        email: (oauthSession as any).email,
+        emailConfirmed: (oauthSession as any).emailConfirmed,
+      };
 
       session.update(s => ({
         ...s,

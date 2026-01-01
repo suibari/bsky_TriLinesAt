@@ -51,7 +51,7 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   }
 
   // 3. Create the Custom Record
-  const record: TriLinesEntry = {
+  const record: Omit<TriLinesEntry, 'uri' | 'cid'> = {
     lines: processedLines,
     createdAt,
     sharedPost
@@ -64,6 +64,29 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   });
 
   return res;
+}
+
+export async function deleteRecord(uri: string) {
+  const agent = getAgent();
+  const sessionDid = get(session).did;
+
+  if (!sessionDid) throw new Error("Not authenticated");
+
+  // Parse URI to get collection and rkey
+  // at://did/collection/rkey
+  const parts = uri.split('/');
+  const rkey = parts.pop();
+  const collection = parts.pop();
+  const repo = parts.pop();
+
+  if (!repo || !collection || !rkey) throw new Error("Invalid URI");
+  if (repo !== sessionDid) throw new Error("Cannot delete other user's post");
+
+  await agent.api.com.atproto.repo.deleteRecord({
+    repo,
+    collection,
+    rkey
+  });
 }
 
 // Helper to get PDS endpoint
@@ -113,7 +136,11 @@ export async function getEntries(did: string) {
     collection: IDS.TriLinesEntry,
     limit: 20
   });
-  return data.records;
+  return data.records.map((r: any) => ({
+    ...r.value,
+    uri: r.uri,
+    cid: r.cid
+  }));
 }
 
 export async function getGlobalFeed() {

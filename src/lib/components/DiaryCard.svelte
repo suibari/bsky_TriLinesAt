@@ -4,7 +4,19 @@
   import { getBlobUrl } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import Button from "./Button.svelte";
-  import { Heart, MessageCircle, Share2, ExternalLink } from "lucide-svelte";
+  import { get } from "svelte/store";
+  import { session } from "$lib/auth/session";
+  import { deleteRecord } from "$lib/bsky";
+  import { createEventDispatcher } from "svelte";
+  import {
+    Heart,
+    MessageCircle,
+    Share2,
+    ExternalLink,
+    Trash2,
+  } from "lucide-svelte";
+
+  const dispatch = createEventDispatcher();
 
   export let entry: TriLinesEntry;
   export let author: any;
@@ -25,10 +37,22 @@
 
   // Placeholder like function
   let liked = false;
-  let likes = Math.floor(Math.random() * 10); // Fake count for MVP demo
+  let likes = 0; // Real likes require fetching post data, 0 for MVP
   function toggleLike() {
     liked = !liked;
     likes += liked ? 1 : -1;
+  }
+
+  async function handleDelete() {
+    if (!confirm("Are you sure you want to delete this diary entry?")) return;
+    try {
+      await deleteRecord(entry.uri);
+      dispatch("delete", { uri: entry.uri });
+      // If singular view or no parent handling, we might want to alert?
+      // But dispatch is best practice.
+    } catch (e) {
+      alert("Failed to delete entry: " + e);
+    }
   }
 </script>
 
@@ -113,5 +137,14 @@
     <button class="ml-auto text-slate-400 hover:text-white">
       <Share2 size={18} />
     </button>
+    {#if $session.isAuthenticated && $session.did === author.did}
+      <button
+        class="ml-4 text-slate-400 hover:text-red-500 transition-colors"
+        on:click={handleDelete}
+        title="Delete Entry"
+      >
+        <Trash2 size={18} />
+      </button>
+    {/if}
   </div>
 </div>
