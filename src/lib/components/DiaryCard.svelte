@@ -63,10 +63,9 @@
         myLikeUri = undefined;
       }
 
-      // For avatars, resolving all DIDs is heavy.
-      // We'll fetch profiles for the first 5 unique likers to show avatars.
+      // Distinct authors for avatars
       const uniqueDids = Array.from(
-        new Set(links.map((l: any) => l.author).filter(Boolean)),
+        new Set(links.map((l: any) => l.author || l.did).filter(Boolean)),
       ).slice(0, 5) as string[];
       if (uniqueDids.length > 0 && $session.agent) {
         try {
@@ -88,28 +87,53 @@
     if (likeLoading || !$session.isAuthenticated) return;
     likeLoading = true;
 
+    const originalLiked = liked;
+    const originalLikes = likes;
+    const originalAvatars = [...likeAvatars];
+    const originalUri = myLikeUri;
+
     try {
-      if (liked && myLikeUri) {
-        // Unlike
-        await unlikeEntry(myLikeUri);
+      if (originalLiked && originalUri) {
+        // Optimistic UI update: Remove like
         liked = false;
-        likes--;
+        likes = Math.max(0, likes - 1);
         myLikeUri = undefined;
-        // Remove self from avatars locally if present
         likeAvatars = likeAvatars.filter((p) => p.did !== $session.did);
+
+        // Actual API call
+        await unlikeEntry(originalUri);
       } else {
-        // Like
-        const res = await likeEntry(entry.uri, entry.cid);
+        // Optimistic UI update: Add like
         liked = true;
         likes++;
+
+        // Try to add self to avatars optimistically
+        if ($session.did && $session.agent) {
+          try {
+            const { data: profile } =
+              await $session.agent.app.bsky.actor.getProfile({
+                actor: $session.did,
+              });
+            if (!likeAvatars.find((p) => p.did === $session.did)) {
+              likeAvatars = [...likeAvatars, profile];
+            }
+          } catch {
+            // silent fail on profile fetch, count is still updated
+          }
+        }
+
+        // Actual API call
+        const res = await likeEntry(entry.uri, entry.cid);
         myLikeUri = res.uri;
-        // Optimistically add self avatar if we valid profile data?
-        // Or just reload. Reload is safer.
-        loadLikes();
       }
     } catch (e) {
       console.error("Like failed", e);
-      alert("Action failed");
+      // Rollback on error
+      liked = originalLiked;
+      likes = originalLikes;
+      likeAvatars = originalAvatars;
+      myLikeUri = originalUri;
+      alert("Action failed. Constellation indexing may be delayed.");
     } finally {
       likeLoading = false;
     }
@@ -236,7 +260,7 @@
       <div class="flex items-center -space-x-2 overflow-hidden ml-2">
         {#each likeAvatars as profile}
           <div
-            class="w-6 h-6 rounded-full border border-slate-900 bg-slate-800"
+            class="w-6 h-6 rounded-full border border-slate-900 bg-slate-800 ring-2 ring-slate-900"
             title={profile.handle}
           >
             {#if profile.avatar}
@@ -245,9 +269,16 @@
                 alt={profile.handle}
                 class="w-full h-full object-cover rounded-full"
               />
+            {:else}
+              <div class="w-full h-full bg-slate-700 rounded-full"></div>
             {/if}
           </div>
         {/each}
+        {#if likes > 5}
+          <div class="pl-3 text-xs text-slate-500 font-medium">
+            +{likes - 5}
+          </div>
+        {/if}
       </div>
     {/if}
 
