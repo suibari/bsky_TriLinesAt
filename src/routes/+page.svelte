@@ -283,7 +283,13 @@
           </div>
         {:else}
           {#each entries as entry (entry.uri)}
-            <DiaryCard {entry} author={profiles[entry.authorDid]} />
+            <DiaryCard
+              {entry}
+              author={profiles[entry.authorDid]}
+              on:delete={(e) => {
+                entries = entries.filter((item) => item.uri !== e.detail.uri);
+              }}
+            />
           {/each}
         {/if}
       </div>

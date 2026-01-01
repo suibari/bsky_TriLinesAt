@@ -3,6 +3,7 @@
   import { session, initSession } from "$lib/auth/session";
   import { IDS } from "$lib/types";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
+  import { goto } from "$app/navigation";
   import { ChevronLeft, Loader2 } from "lucide-svelte";
   import { onMount } from "svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
@@ -99,7 +100,13 @@
         <Loader2 class="animate-spin text-fuchsia-500" size={32} />
       </div>
     {:else if entry && author}
-      <DiaryCard {entry} {author} />
+      <DiaryCard
+        {entry}
+        {author}
+        on:delete={() => {
+          goto("/");
+        }}
+      />
     {:else}
       <div class="glass-panel p-8 text-center text-red-400">
         {$t("entry.not_found")}
