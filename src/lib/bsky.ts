@@ -90,6 +90,16 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
           facets: rt.facets,
           createdAt,
           langs: [currentLocale],
+          embed: processedLines.filter(l => l.image).length > 0 ? {
+            $type: 'app.bsky.embed.images',
+            images: processedLines
+              .filter(l => l.image)
+              .slice(0, 4)
+              .map(l => ({
+                image: l.image!,
+                alt: l.text.slice(0, 300) || "Diary Image" // Use line text as alt, truncated
+              }))
+          } : undefined
         },
       });
       sharedPost = { uri: post.data.uri, cid: post.data.cid };
