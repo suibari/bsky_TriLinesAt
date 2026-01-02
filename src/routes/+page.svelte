@@ -182,12 +182,27 @@
           {$t("auth.signin")}
         </Button>
 
-        <button
-          class="text-xs text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
-          on:click={toggleLocale}
+        <div
+          class="flex items-center gap-3 text-xs font-medium tracking-widest"
         >
-          {$locale === "en" ? "日本語に切替" : "Switch to English"}
-        </button>
+          <button
+            class="transition-colors {$locale === 'ja'
+              ? 'text-fuchsia-400'
+              : 'text-slate-600 hover:text-slate-400'}"
+            on:click={() => locale.set("ja")}
+          >
+            日本語
+          </button>
+          <span class="text-slate-700">/</span>
+          <button
+            class="transition-colors {$locale === 'en'
+              ? 'text-fuchsia-400'
+              : 'text-slate-600 hover:text-slate-400'}"
+            on:click={() => locale.set("en")}
+          >
+            English
+          </button>
+        </div>
       </div>
     </div>
   {:else}
@@ -201,12 +216,29 @@
           {$t("app.title")}
         </h1>
         <div class="flex items-center gap-4">
-          <button
-            class="text-[10px] px-2 py-1 rounded bg-white/5 text-slate-400 hover:text-white border border-white/5 transition-colors"
-            on:click={toggleLocale}
+          <div
+            class="flex items-center bg-white/5 rounded-lg border border-white/5 p-0.5"
           >
-            {$locale === "en" ? "JP" : "EN"}
-          </button>
+            <button
+              class="text-[10px] px-2 py-1 rounded-md transition-all {$locale ===
+              'ja'
+                ? 'bg-fuchsia-500/20 text-fuchsia-300 shadow-sm border border-fuchsia-500/30'
+                : 'text-slate-500 hover:text-slate-300'}"
+              on:click={() => locale.set("ja")}
+            >
+              JP
+            </button>
+            <div class="w-px h-3 bg-white/5 mx-0.5"></div>
+            <button
+              class="text-[10px] px-2 py-1 rounded-md transition-all {$locale ===
+              'en'
+                ? 'bg-fuchsia-500/20 text-fuchsia-300 shadow-sm border border-fuchsia-500/30'
+                : 'text-slate-500 hover:text-slate-300'}"
+              on:click={() => locale.set("en")}
+            >
+              EN
+            </button>
+          </div>
           <button
             class="text-slate-400 hover:text-white transition-colors"
             on:click={signOut}
