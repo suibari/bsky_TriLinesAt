@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TriLinesEntry } from "$lib/types";
+  import { IDS, type TriLinesEntry } from "$lib/types";
   import { getBlobUrl, likeEntry, unlikeEntry, getEntryLikes } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import { session } from "$lib/auth/session";
@@ -55,10 +55,32 @@
       // Let's assume we can fetch a few profiles.
 
       const viewerDid = $session.did;
-      const myLike = links.find((l: any) => l.author === viewerDid);
+      // Debug
+      // console.log("LoadLikes", { viewerDid, links });
+
+      const myLike = links.find((l: any) => {
+        const authorDid =
+          l.author ||
+          l.did ||
+          (l.value && l.value.author) ||
+          (l.value && l.value.did);
+        return authorDid === viewerDid;
+      });
+
       if (myLike) {
         liked = true;
-        myLikeUri = myLike.uri;
+        // Robustly get or construct URI
+        if (myLike.uri) {
+          myLikeUri = myLike.uri;
+        } else {
+          // Constellation raw object fallback
+          const did = myLike.author || myLike.did;
+          const rkey = myLike.rkey;
+          const collection = myLike.collection || IDS.TriLinesLike;
+          if (did && rkey) {
+            myLikeUri = `at://${did}/${collection}/${rkey}`;
+          }
+        }
       } else {
         liked = false;
         myLikeUri = undefined;
@@ -94,16 +116,25 @@
     const originalUri = myLikeUri;
 
     try {
-      if (originalLiked && originalUri) {
-        // Optimistic UI update: Remove like
-        liked = false;
-        likes = Math.max(0, likes - 1);
-        myLikeUri = undefined;
-        likeAvatars = likeAvatars.filter((p) => p.did !== $session.did);
+      if (originalLiked) {
+        // Unlike Logic
+        if (originalUri) {
+          // Optimistic UI update: Remove like
+          liked = false;
+          likes = Math.max(0, likes - 1);
+          myLikeUri = undefined;
+          likeAvatars = likeAvatars.filter((p) => p.did !== $session.did);
 
-        // Actual API call
-        await unlikeEntry(originalUri);
+          // Actual API call
+          await unlikeEntry(originalUri);
+        } else {
+          // If we think it's liked but have no URI, we can't delete it easily.
+          // But we MUST NOT try to create a new one (double like).
+          // For now, we just refresh the likes to sync state.
+          await loadLikes();
+        }
       } else {
+        // Like Logic
         // Optimistic UI update: Add like
         liked = true;
         likes++;
@@ -119,7 +150,7 @@
               likeAvatars = [...likeAvatars, profile];
             }
           } catch {
-            // silent fail on profile fetch, count is still updated
+            // silent fail
           }
         }
 
