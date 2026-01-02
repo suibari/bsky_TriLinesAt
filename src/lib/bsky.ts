@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { session } from './auth/session';
 import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
-import { Agent, type BlobRef } from '@atproto/api';
+import { Agent, RichText, type BlobRef } from '@atproto/api';
 import { t, locale } from './i18n';
 
 // HUB_URI is the target for Global Feed aggregation via Constellation.
@@ -23,6 +23,7 @@ export async function uploadImage(blob: Blob): Promise<BlobRef> {
 
 export async function createDiary(lines: { text: string; image?: Blob }[], shareToBluesky: boolean) {
   const agent = getAgent();
+  const sessionDid = get(session).did!;
 
   // 1. Upload images
   const processedLines: TriLinesLine[] = [];
@@ -38,48 +39,86 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   }
 
   const createdAt = new Date().toISOString();
-  let sharedPost;
 
-  // 2. Share to Bluesky if requested
-  if (shareToBluesky) {
-    // Create a summary for the post
-    const summary = lines.map(l => l.text).join('\n').substring(0, 200) + '...';
-
-    // Get localized template and language code
-    const currentLocale = get(locale);
-    const template = get(t)('share.template');
-    const postText = `${template}\n\n${summary}\n\n#TriLinesAt`;
-
-    // Using createRecord directly is more robust than agent.post helper with OAuth sessions
-    const post = await agent.api.com.atproto.repo.createRecord({
-      repo: get(session).did!,
-      collection: 'app.bsky.feed.post',
-      record: {
-        $type: 'app.bsky.feed.post',
-        text: postText,
-        createdAt,
-        langs: [currentLocale],
-      },
-    });
-    sharedPost = { uri: post.data.uri, cid: post.data.cid };
-  }
-
-  // 3. Create the Custom Record
-  const record: Omit<TriLinesEntry, 'uri' | 'cid'> = {
+  // 2. Initial Create of Custom Record (to get URI/Rkey)
+  const initialRecord: Omit<TriLinesEntry, 'uri' | 'cid'> = {
     lines: processedLines,
     createdAt,
-    sharedPost,
-    authorDid: get(session).did!,
+    sharedPost: undefined,
+    authorDid: sessionDid,
     hubRef: HUB_URI
   };
 
-  const res = await agent.api.com.atproto.repo.createRecord({
-    repo: get(session).did!,
+  const { data: entryData } = await agent.api.com.atproto.repo.createRecord({
+    repo: sessionDid,
     collection: IDS.TriLinesEntry,
-    record: record as any,
+    record: initialRecord as any,
   });
 
-  return res;
+  const entryUri = entryData.uri;
+  const entryCid = entryData.cid;
+  const rkey = entryUri.split('/').pop();
+
+  if (!rkey) throw new Error("Failed to generate rkey");
+
+  let sharedPost;
+
+  // 3. Share to Bluesky if requested
+  if (shareToBluesky) {
+    try {
+      // Create a summary for the post
+      const rawSummary = lines.map(l => l.text).join('\n');
+      const summary = rawSummary.length > 200
+        ? rawSummary.substring(0, 200) + '...'
+        : rawSummary;
+
+      // Get localized template and language code
+      const currentLocale = get(locale);
+      const template = get(t)('share.template');
+      const entryUrl = `https://trilinesat.suibari.com/entry/${sessionDid}/${rkey}`;
+      const postText = `${template}\n\n${summary}\n\n${entryUrl}\n\n#TriLinesAt`;
+
+      const rt = new RichText({ text: postText });
+      await rt.detectFacets(agent);
+
+      const post = await agent.api.com.atproto.repo.createRecord({
+        repo: sessionDid,
+        collection: 'app.bsky.feed.post',
+        record: {
+          $type: 'app.bsky.feed.post',
+          text: rt.text,
+          facets: rt.facets,
+          createdAt,
+          langs: [currentLocale],
+        },
+      });
+      sharedPost = { uri: post.data.uri, cid: post.data.cid };
+
+      // 4. Update the Custom Record with sharedPost info
+      const updatedRecord = {
+        ...initialRecord,
+        sharedPost
+      };
+
+      // We use applyWrites or putRecord. putRecord is simpler for single update.
+      // But we need to use com.atproto.repo.putRecord
+      await agent.api.com.atproto.repo.putRecord({
+        repo: sessionDid,
+        collection: IDS.TriLinesEntry,
+        rkey: rkey,
+        record: updatedRecord as any,
+        swapRecord: entryCid // optimistic concurrency control
+      });
+
+    } catch (e) {
+      console.warn("Failed to share to Bluesky or update record", e);
+      // We don't fail the whole operation if sharing fails, 
+      // but the user might want to know. For now, we return the entryData.
+    }
+  }
+
+  // Return the initial entry data (or could return updated, but UI just needs URI usually)
+  return entryData;
 }
 
 export async function deleteRecord(uri: string) {
