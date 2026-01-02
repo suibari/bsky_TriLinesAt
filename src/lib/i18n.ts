@@ -42,7 +42,7 @@ export const translations = {
     "ranking.days": "days",
   },
   ja: {
-    "app.title": "TriLines",
+    "app.title": "TriLinesAt",
     "app.tagline": "寝る前の5分、3行で綴る、みんなの毎日の記録",
     "app.connect": `寝る前に3つ、よかったことを記録することで、考え方が前向きになる"Three Good Things"メソッドのソーシャルアプリです。Blueskyでログインして、ポジティブな青空を描こう`,
     "auth.signin": "Blueskyでログイン",

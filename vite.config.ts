@@ -10,7 +10,7 @@ export default defineConfig({
 			includeAssets: ['favicon.png', 'robots.txt'],
 			manifest: {
 				name: 'TriLinesAt',
-				short_name: 'TriLines',
+				short_name: 'TriLinesAt',
 				description: 'Social 3-line diary on AT Protocol',
 				theme_color: '#0f172a',
 				background_color: '#0f172a',
