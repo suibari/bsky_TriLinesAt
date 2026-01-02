@@ -12,6 +12,8 @@
   import { goto } from "$app/navigation";
   import { t } from "$lib/i18n";
 
+  import { onMount } from "svelte";
+
   // Redirect if not authed
   $: if (!$session.loading && !$session.isAuthenticated) {
     goto("/");
@@ -23,8 +25,37 @@
     { text: "", image: undefined as Blob | undefined, preview: "" },
   ];
 
-  let shareToBluesky = true;
+  let shareToBluesky = false; // Default OFF (safer side)
+  let rememberSettings = false;
   let submitting = false;
+  let isLoaded = false;
+
+  onMount(() => {
+    // Load settings from localStorage
+    if (typeof localStorage !== "undefined") {
+      const storedRemember =
+        localStorage.getItem("settings.rememberShare") === "true";
+      rememberSettings = storedRemember;
+
+      if (storedRemember) {
+        shareToBluesky =
+          localStorage.getItem("settings.shareToBluesky") === "true";
+      }
+    }
+    isLoaded = true;
+  });
+
+  // Save settings when changed
+  $: if (isLoaded && typeof localStorage !== "undefined") {
+    localStorage.setItem("settings.rememberShare", String(rememberSettings));
+    if (rememberSettings) {
+      localStorage.setItem("settings.shareToBluesky", String(shareToBluesky));
+    } else {
+      // Optional: Clear stored preference if remember is OFF, or just don't load it.
+      // Keeping it simple: just don't load it next time, but we can clear it to be cleaner
+      localStorage.removeItem("settings.shareToBluesky");
+    }
+  }
 
   const MAX_CHARS = 50;
 
@@ -150,20 +181,35 @@
     {/each}
 
     <!-- Options -->
-    <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
-      <span class="text-sm font-medium text-slate-300"
-        >{$t("editor.share_bluesky")}</span
-      >
-      <label class="relative inline-flex items-center cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={shareToBluesky}
-          class="sr-only peer"
-        />
-        <div
-          class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"
-        ></div>
-      </label>
+    <div class="glass-panel rounded-xl p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-slate-300"
+          >{$t("editor.share_bluesky")}</span
+        >
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            bind:checked={shareToBluesky}
+            class="sr-only peer"
+          />
+          <div
+            class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"
+          ></div>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            bind:checked={rememberSettings}
+            class="form-checkbox h-4 w-4 text-fuchsia-500 rounded border-slate-500 bg-black/20 focus:ring-0 focus:ring-offset-0"
+          />
+          <span class="text-xs text-slate-400 select-none"
+            >{$t("editor.remember_settings")}</span
+          >
+        </label>
+      </div>
     </div>
 
     <div class="pt-4">
