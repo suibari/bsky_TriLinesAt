@@ -1,6 +1,5 @@
 <script>
 	import "../app.css";
-	import favicon from "$lib/assets/favicon.svg";
 	import { onMount } from "svelte";
 
 	let { children } = $props();
@@ -23,7 +22,6 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
 	<!-- PWA Manifest Link -->
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#0f172a" />

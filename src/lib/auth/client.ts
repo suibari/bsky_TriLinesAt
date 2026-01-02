@@ -32,7 +32,7 @@ export async function createClient() {
       client_id,
       client_name: 'TriLinesAt',
       client_uri: origin,
-      logo_uri: `${origin}/favicon.svg`,
+      logo_uri: `${origin}/favicon.png`,
       tos_uri: `${origin}/tos`,
       policy_uri: `${origin}/policy`,
       redirect_uris: [redirectUri],

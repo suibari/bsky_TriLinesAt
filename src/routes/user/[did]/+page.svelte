@@ -5,7 +5,7 @@
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import { Agent } from "@atproto/api";
-  import { ChevronLeft, Loader2 } from "lucide-svelte";
+  import { ChevronLeft, Loader2, Edit3 } from "lucide-svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { t } from "$lib/i18n";
 
@@ -150,4 +150,15 @@
       </div>
     {/if}
   </div>
+
+  {#if did === $session.did}
+    <!-- FAB (Floating Action Button) -->
+    <a href="/new" class="fixed bottom-6 right-6 z-50">
+      <button
+        class="w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30 flex items-center justify-center hover:scale-110 transition-transform"
+      >
+        <Edit3 size={24} />
+      </button>
+    </a>
+  {/if}
 </div>

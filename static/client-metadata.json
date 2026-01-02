@@ -2,7 +2,7 @@
   "client_id": "https://trilinesat.suibari.com/client-metadata.json",
   "client_name": "TriLinesAt",
   "client_uri": "https://trilinesat.suibari.com",
-  "logo_uri": "https://trilinesat.suibari.com/favicon.svg",
+  "logo_uri": "https://trilinesat.suibari.com/favicon.png",
   "tos_uri": "https://trilinesat.suibari.com/tos",
   "policy_uri": "https://trilinesat.suibari.com/policy",
   "redirect_uris": [

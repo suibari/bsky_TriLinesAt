@@ -101,7 +101,7 @@
           bind:value={line.text}
           maxlength={MAX_CHARS}
           placeholder={$t("editor.placeholder")}
-          class="w-full bg-transparent border-none focus:ring-0 text-lg placeholder-slate-600 resize-none h-16 leading-relaxed"
+          class="w-full bg-transparent border-none focus:ring-0 text-lg placeholder-slate-600 resize-none h-16 text-white caret-fuchsia-500 px-1"
         ></textarea>
 
         <!-- Image Preview -->

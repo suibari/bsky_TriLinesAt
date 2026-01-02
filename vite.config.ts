@@ -7,7 +7,7 @@ export default defineConfig({
 		sveltekit(),
 		VitePWA({
 			registerType: 'autoUpdate',
-			includeAssets: ['favicon.svg', 'robots.txt'],
+			includeAssets: ['favicon.png', 'robots.txt'],
 			manifest: {
 				name: 'TriLinesAt',
 				short_name: 'TriLines',
@@ -17,9 +17,9 @@ export default defineConfig({
 				display: 'standalone',
 				icons: [
 					{
-						src: 'favicon.svg',
+						src: 'favicon.png',
 						sizes: 'any',
-						type: 'image/svg+xml'
+						type: 'image/png'
 					}
 				]
 			},
