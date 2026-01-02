@@ -20,9 +20,12 @@
   import { getPds } from "$lib/bsky";
   import { Agent } from "@atproto/api";
 
-  onMount(() => {
+  onMount(async () => {
     if (!$session.agent) {
-      initSession();
+      await initSession();
+    }
+    if (!get(session).isAuthenticated) {
+      goto("/");
     }
   });
 
