@@ -211,13 +211,17 @@ export async function getEntries(did: string) {
 // HUB_URI is the target for Global Feed aggregation via Constellation.
 // We link to the Developer's Profile Record to ensure it's indexed as a valid backlink.
 
-export async function getGlobalFeed() {
+export async function getGlobalFeed(cursor?: string, limit = 50) {
   // Use Constellation to find all diary entries linking to the HUB_URI
   const endpoint = 'https://constellation.microcosm.blue/links';
   const url = new URL(endpoint);
   url.searchParams.set('target', HUB_URI);
   url.searchParams.set('collection', IDS.TriLinesEntry);
   url.searchParams.set('path', '.hubRef');
+  url.searchParams.set('limit', limit.toString());
+  if (cursor) {
+    url.searchParams.set('cursor', cursor);
+  }
 
   try {
     const res = await fetch(url.toString());
@@ -225,7 +229,9 @@ export async function getGlobalFeed() {
 
     const data = await res.json();
     // Handle various Constellation response formats
+    // If paginated, it might return { cursor: "...", links: [...] }
     const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
+    const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
 
     // Constellation minimal format check
     // Some responses only give {did, collection, rkey}. We need to fetch the actual records.
@@ -292,7 +298,7 @@ export async function getGlobalFeed() {
           authorDid: did,
         };
       } catch (e) {
-        console.warn("Failed to resolve global entry", e);
+        // console.warn("Failed to resolve global entry", e);
         return null;
       }
     }));
@@ -301,11 +307,39 @@ export async function getGlobalFeed() {
     const posts = entries.filter(Boolean) as any[];
     posts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    return posts;
+    return { posts, cursor: nextCursor };
   } catch (e) {
     console.warn("Global feed fetch failed", e);
-    return [];
+    return { posts: [], cursor: undefined };
   }
+}
+
+export async function getAllEntriesForRanking() {
+  // Constellation links limit is typically 100, so we must loop.
+  const MAX_ITEMS = 10000;
+  let allPosts: any[] = [];
+  let cursor: string | undefined = undefined;
+
+  // Safety break to prevent infinite loops logic error
+  let loops = 0;
+  const MAX_LOOPS = 25; // 25 * 100 = 2500 approx
+
+  do {
+    // Determine limit for this request (try to get 100 at a time)
+    const { posts, cursor: nextCursor } = await getGlobalFeed(cursor, 100);
+
+    if (posts.length === 0) break;
+
+    allPosts = [...allPosts, ...posts];
+    cursor = nextCursor;
+    loops++;
+
+    // Break if we have enough or no more pages
+    if (allPosts.length >= MAX_ITEMS) break;
+
+  } while (cursor && loops < MAX_LOOPS);
+
+  return allPosts;
 }
 
 export async function getFollows(did: string) {

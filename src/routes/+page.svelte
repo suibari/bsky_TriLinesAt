@@ -16,18 +16,50 @@
   let activeTab: "following" | "global" | "ranking" = "following";
   let entries: any[] = [];
   let loading = true;
+  let loadingMore = false;
+  let cursor: string | undefined = undefined;
   let profiles: Record<string, any> = {};
 
   let rankingData: Rankings = { total: [], streak: [] };
   let rankingMode: "total" | "streak" = "total";
 
+  // Element references for infinite scroll
+  let sentinel: HTMLElement;
+
   onMount(() => {
     initSession().then(() => {
       if ($session.isAuthenticated) {
         loadSelfProfile();
-        loadFollowing();
+        loadFollowing(true);
       }
     });
+
+    // Setup intersection observer
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && cursor && !loadingMore && !loading) {
+          if (activeTab === "following") loadFollowing(false);
+          if (activeTab === "global") loadGlobal(false);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+
+    // We need to observe when sentinel is available.
+    // Svelte mount might be too early if DOM isn't ready or inside if block.
+    // We'll attach it via action or simple check later.
+    // For now, let's just re-observe when activeTab changes or entries update
+    const interval = setInterval(() => {
+      if (sentinel) {
+        observer.observe(sentinel);
+        clearInterval(interval);
+      }
+    }, 500);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(interval);
+    };
   });
 
   async function loadSelfProfile() {
@@ -51,21 +83,28 @@
     }
   }
 
-  async function loadFollowing() {
+  async function loadFollowing(reset = true) {
     if (!$session.agent) return;
-    loading = true;
+    if (reset) {
+      loading = true;
+      entries = [];
+      cursor = undefined;
+    } else {
+      loadingMore = true;
+    }
+
     try {
-      activeTab = "following";
-      // 1. Get follows
+      if (activeTab !== "following") activeTab = "following";
+
+      // 1. Get follows (cached ideally, but fast enough)
       const follows = await getFollows($session.did!);
       const followDids = new Set(follows.map((f) => f.did));
-      // Include self
       followDids.add($session.did!);
 
-      // 2. Optimization: Filter Global Feed instead of N requests
-      // This works efficiently because Constellation returns the global stream.
-      // We just pick what matches our follow list.
-      const globalPosts = await getGlobalFeed();
+      // 2. Get Global Feed chunk
+      const result = await getGlobalFeed(cursor);
+      const globalPosts = result.posts;
+      cursor = result.cursor;
 
       const filteredEntries = globalPosts.filter((entry: any) =>
         followDids.has(entry.authorDid),
@@ -78,7 +117,6 @@
         ),
       ];
       if (authorDids.length > 0) {
-        // Check which profiles we already have to save bandwidth
         const missingDids = authorDids.filter(
           (did) => !profiles[did as string],
         );
@@ -97,21 +135,35 @@
         }
       }
 
-      entries = filteredEntries;
+      if (reset) {
+        entries = filteredEntries;
+      } else {
+        entries = [...entries, ...filteredEntries];
+      }
     } catch (e) {
       console.error(e);
     } finally {
       loading = false;
+      loadingMore = false;
     }
   }
 
-  async function loadGlobal() {
+  async function loadGlobal(reset = true) {
     if (!$session.agent) return;
-    loading = true;
+    if (reset) {
+      loading = true;
+      entries = [];
+      cursor = undefined;
+    } else {
+      loadingMore = true;
+    }
+
     try {
-      activeTab = "global";
-      // This now returns directly shaped TriLinesEntry objects from Constellation
-      const posts = await getGlobalFeed();
+      if (activeTab !== "global") activeTab = "global";
+
+      const result = await getGlobalFeed(cursor);
+      const posts = result.posts;
+      cursor = result.cursor;
 
       const authorDids = [
         ...new Set(posts.map((p: any) => p.authorDid).filter(Boolean)),
@@ -130,20 +182,30 @@
         }
       }
 
-      entries = posts;
+      if (reset) {
+        entries = posts;
+      } else {
+        entries = [...entries, ...posts];
+      }
     } catch (e) {
       console.error(e);
     } finally {
       loading = false;
+      loadingMore = false;
     }
   }
 
   async function loadRanking() {
     if (!$session.agent) return;
     loading = true;
+    entries = []; // Clear entries when in ranking mode
+
     try {
       activeTab = "ranking";
-      const posts = await getGlobalFeed();
+      // Need import specifically if separate function, assuming imported or available
+      // Using the one defined in bsky.ts
+      const { getAllEntriesForRanking } = await import("$lib/bsky");
+      const posts = await getAllEntriesForRanking();
 
       // Calculate
       rankingData = calculateRankings(posts);
@@ -324,7 +386,7 @@
           'following'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-slate-400 hover:text-white'}"
-          on:click={loadFollowing}
+          on:click={() => loadFollowing(true)}
         >
           <Users size={16} />
           <span class="whitespace-nowrap">{$t("feed.following")}</span>
@@ -334,7 +396,7 @@
           'global'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-slate-400 hover:text-white'}"
-          on:click={loadGlobal}
+          on:click={() => loadGlobal(true)}
         >
           <Compass size={16} />
           <span class="whitespace-nowrap">{$t("feed.global")}</span>
@@ -453,6 +515,18 @@
               }}
             />
           {/each}
+
+          <!-- Infinite Scroll Sentinel -->
+          {#if (activeTab === "following" || activeTab === "global") && !loading}
+            <div bind:this={sentinel} class="h-4 w-full"></div>
+            {#if loadingMore}
+              <div class="flex justify-center py-4">
+                <div
+                  class="w-6 h-6 rounded-full border-t-2 border-fuchsia-500 animate-spin"
+                ></div>
+              </div>
+            {/if}
+          {/if}
         {/if}
       </div>
     </div>
