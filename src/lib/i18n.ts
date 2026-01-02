@@ -5,8 +5,8 @@ export type Locale = 'en' | 'ja';
 export const translations = {
   en: {
     "app.title": "TriLinesAt",
-    "app.tagline": "Make journaling a habit. Share your day in 3 lines.",
-    "app.connect": "Connect with others who value concise expression.",
+    "app.tagline": "Five minutes before bed, three lines of journaling, everyone's daily record.",
+    "app.connect": `This social app uses the "Three Good Things" method, which encourages a more positive outlook by recording three good things before going to bed. Log in as Bluesky and let's paint a positive blue-sky together.`,
     "auth.signin": "Sign in with Bluesky",
     "auth.signout": "Sign Out",
     "auth.handle_prompt": "Enter your Bluesky handle (e.g. user.bsky.social):",
@@ -43,8 +43,8 @@ export const translations = {
   },
   ja: {
     "app.title": "TriLines",
-    "app.tagline": "3行で綴る、毎日の記録",
-    "app.connect": "Blueskyでログインして、あなたの物語を始めましょう",
+    "app.tagline": "寝る前の5分、3行で綴る、みんなの毎日の記録",
+    "app.connect": `寝る前に3つ、よかったことを記録することで、考え方が前向きになる"Three Good Things"メソッドのソーシャルアプリです。Blueskyでログインして、ポジティブな青空を描こう`,
     "auth.signin": "Blueskyでログイン",
     "auth.signout": "ログアウト",
     "auth.handle_prompt": "Blueskyのハンドル名を入力してください (例: user.bsky.social)",
