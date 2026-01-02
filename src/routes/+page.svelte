@@ -15,7 +15,7 @@
   // State
   let activeTab: "following" | "global" | "ranking" = "following";
   let entries: any[] = [];
-  let loading = false;
+  let loading = true;
   let profiles: Record<string, any> = {};
 
   let rankingData: Rankings = { total: [], streak: [] };
@@ -192,7 +192,12 @@
 </script>
 
 <div class="min-h-screen text-slate-100 pb-20">
-  {#if !$session.isAuthenticated}
+  {#if $session.loading}
+    <!-- Optional: Loading Spinner or just blank -->
+    <div class="flex items-center justify-center min-h-screen">
+      <!-- <div class="w-8 h-8 rounded-full border-t-2 border-fuchsia-500 animate-spin"></div> -->
+    </div>
+  {:else if !$session.isAuthenticated}
     <!-- Landing Page -->
     <div
       class="flex flex-col items-center justify-center min-h-[80vh] px-4 text-center space-y-8"
@@ -252,7 +257,7 @@
     </div>
   {:else}
     <!-- Authenticated App -->
-    <div class="max-w-xl mx-auto px-4 pt-2 space-y-6">
+    <div class="max-w-xl mx-auto px-4 pt-6 space-y-6">
       <!-- Header -->
       <header class="flex items-center justify-between">
         <h1
