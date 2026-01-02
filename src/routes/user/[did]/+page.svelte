@@ -130,7 +130,7 @@
 
         {#if entries.length === 0}
           <p class="text-center text-slate-500 py-8">
-            {$t("feed.no_entries_yet")}
+            {$t("feed.no_entries")}
           </p>
         {:else}
           {#each entries as entry (entry.uri)}

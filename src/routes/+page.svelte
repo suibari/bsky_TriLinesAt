@@ -4,18 +4,22 @@
   import { getFollows, getGlobalFeed } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
-  import { Edit3, Compass, Users, LogOut } from "lucide-svelte";
+  import { Edit3, Compass, Users, LogOut, Trophy } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import Avatar from "$lib/components/Avatar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { Agent } from "@atproto/api";
   import { t, locale } from "$lib/i18n";
+  import { calculateRankings, type Rankings } from "$lib/ranking";
 
   // State
-  let activeTab: "following" | "global" = "following";
+  let activeTab: "following" | "global" | "ranking" = "following";
   let entries: any[] = [];
   let loading = false;
   let profiles: Record<string, any> = {};
+
+  let rankingData: Rankings = { total: [], streak: [] };
+  let rankingMode: "total" | "streak" = "total";
 
   onMount(() => {
     initSession().then(() => {
@@ -127,6 +131,47 @@
       }
 
       entries = posts;
+    } catch (e) {
+      console.error(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadRanking() {
+    if (!$session.agent) return;
+    loading = true;
+    try {
+      activeTab = "ranking";
+      const posts = await getGlobalFeed();
+
+      // Calculate
+      rankingData = calculateRankings(posts);
+
+      // Fetch profiles for top 20 of each
+      const topDids = new Set([
+        ...rankingData.total.slice(0, 20).map((r) => r.did),
+        ...rankingData.streak.slice(0, 20).map((r) => r.did),
+      ]);
+
+      const authorDids = Array.from(topDids);
+      if (authorDids.length > 0) {
+        // Check missing
+        const missingDids = authorDids.filter((did) => !profiles[did]);
+        if (missingDids.length > 0) {
+          try {
+            // Batch in chunks of 25 if needed, but 40 is fine
+            const { data } = await $session.agent.app.bsky.actor.getProfiles({
+              actors: missingDids,
+            });
+            const newProfiles = { ...profiles };
+            data.profiles.forEach((p) => (newProfiles[p.did] = p));
+            profiles = newProfiles;
+          } catch (e) {
+            console.warn("Failed to fetch ranking profiles", e);
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -266,7 +311,9 @@
       </a>
 
       <!-- Tabs -->
-      <div class="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm">
+      <div
+        class="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm overflow-x-auto"
+      >
         <button
           class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
           'following'
@@ -275,7 +322,7 @@
           on:click={loadFollowing}
         >
           <Users size={16} />
-          {$t("feed.following")}
+          <span class="whitespace-nowrap">{$t("feed.following")}</span>
         </button>
         <button
           class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
@@ -285,7 +332,17 @@
           on:click={loadGlobal}
         >
           <Compass size={16} />
-          {$t("feed.global")}
+          <span class="whitespace-nowrap">{$t("feed.global")}</span>
+        </button>
+        <button
+          class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
+          'ranking'
+            ? 'bg-white/10 text-white shadow-sm'
+            : 'text-slate-400 hover:text-white'}"
+          on:click={loadRanking}
+        >
+          <Trophy size={16} />
+          <span class="whitespace-nowrap">{$t("feed.ranking")}</span>
         </button>
       </div>
 
@@ -300,11 +357,79 @@
                 <div class="h-3 bg-white/5 rounded w-1/4"></div>
               </div>
             </div>
-            <div class="space-y-2">
-              <div class="h-4 bg-white/5 rounded"></div>
-              <div class="h-4 bg-white/5 rounded"></div>
-              <div class="h-4 bg-white/5 rounded w-2/3"></div>
+          </div>
+        {:else if activeTab === "ranking"}
+          <!-- Ranking View -->
+          <div class="space-y-6">
+            <div class="flex justify-center gap-4">
+              <button
+                class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
+                'total'
+                  ? 'bg-fuchsia-500 text-white shadow-lg'
+                  : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
+                on:click={() => (rankingMode = "total")}
+              >
+                {$t("ranking.total")}
+              </button>
+              <button
+                class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
+                'streak'
+                  ? 'bg-fuchsia-500 text-white shadow-lg'
+                  : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
+                on:click={() => (rankingMode = "streak")}
+              >
+                {$t("ranking.streak")}
+              </button>
             </div>
+
+            {#each (rankingMode === "total" ? rankingData.total : rankingData.streak).slice(0, 50) as item}
+              <div class="glass-panel p-4 flex items-center gap-4">
+                <div
+                  class="w-8 text-center font-black text-xl italic {item.rank <=
+                  3
+                    ? 'text-yellow-400'
+                    : 'text-slate-600'}"
+                >
+                  #{item.rank}
+                </div>
+
+                <a
+                  href="/user/{item.did}"
+                  class="flex items-center gap-3 flex-1 min-w-0"
+                >
+                  {#if profiles[item.did]}
+                    <Avatar src={profiles[item.did].avatar} size="md" />
+                    <div class="min-w-0">
+                      <div class="font-bold truncate">
+                        {profiles[item.did].displayName ||
+                          profiles[item.did].handle}
+                      </div>
+                      <div class="text-xs text-slate-400 truncate">
+                        @{profiles[item.did].handle}
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="w-10 h-10 rounded-full bg-slate-700"></div>
+                    <div class="min-w-0">
+                      <div class="font-bold truncate text-slate-500">
+                        Loading...
+                      </div>
+                    </div>
+                  {/if}
+                </a>
+
+                <div class="text-right">
+                  <div class="text-2xl font-black text-white">{item.count}</div>
+                  <div
+                    class="text-[10px] text-slate-400 uppercase tracking-widest"
+                  >
+                    {rankingMode === "total"
+                      ? $t("ranking.days")
+                      : $t("ranking.days")}
+                  </div>
+                </div>
+              </div>
+            {/each}
           </div>
         {:else if entries.length === 0}
           <div class="text-center py-12 text-slate-500">
