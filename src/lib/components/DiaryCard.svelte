@@ -6,7 +6,7 @@
   import { deleteRecord } from "$lib/bsky";
   import { createEventDispatcher, onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Heart, ExternalLink, Trash2 } from "lucide-svelte";
+  import { Heart, ExternalLink, Trash2, X } from "lucide-svelte";
   import { t } from "$lib/i18n";
 
   const dispatch = createEventDispatcher();
@@ -167,6 +167,9 @@
   onMount(() => {
     loadLikes();
   });
+
+  // Lightbox handled globally
+  import { openLightbox } from "$lib/stores/lightbox";
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -227,11 +230,29 @@
         <div class="flex-1 space-y-2">
           <p class="text-lg leading-relaxed text-slate-100">{line.text}</p>
           {#if line.image}
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
             <div
-              class="relative overflow-hidden rounded-lg mt-2 max-w-sm bg-black/20"
+              class="relative overflow-hidden rounded-lg mt-2 max-w-sm bg-black/20 group-hover:ring-2 ring-white/10 transition-all cursor-zoom-in"
+              on:click={(e) => {
+                e.stopPropagation();
+                openLightbox(
+                  getBlobUrl(author?.did || entry.authorDid, line.image!),
+                );
+              }}
+              role="button"
+              tabindex="0"
+              on:keydown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  openLightbox(
+                    getBlobUrl(author?.did || entry.authorDid, line.image!),
+                  );
+                }
+              }}
             >
               <img
-                src={getBlobUrl(author?.did || entry.authorDid, line.image)}
+                src={getBlobUrl(author?.did || entry.authorDid, line.image!)}
                 alt="Entry attachment"
                 class="w-full h-auto max-h-64 object-cover transform hover:scale-105 transition-transform duration-500"
                 loading="lazy"

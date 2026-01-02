@@ -252,7 +252,7 @@
     </div>
   {:else}
     <!-- Authenticated App -->
-    <div class="max-w-xl mx-auto px-4 pt-6 space-y-6">
+    <div class="max-w-xl mx-auto px-4 pt-2 space-y-6">
       <!-- Header -->
       <header class="flex items-center justify-between">
         <h1

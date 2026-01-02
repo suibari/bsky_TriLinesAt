@@ -1,6 +1,7 @@
 <script>
 	import "../app.css";
 	import { onMount } from "svelte";
+	import Lightbox from "$lib/components/Lightbox.svelte";
 
 	let { children } = $props();
 
@@ -27,4 +28,5 @@
 	<meta name="theme-color" content="#0f172a" />
 </svelte:head>
 
+<Lightbox />
 {@render children()}
