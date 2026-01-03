@@ -2,6 +2,7 @@
 	import "../app.css";
 	import { onMount } from "svelte";
 	import Lightbox from "$lib/components/Lightbox.svelte";
+	import Footer from "$lib/components/Footer.svelte";
 
 	let { children } = $props();
 
@@ -29,4 +30,7 @@
 </svelte:head>
 
 <Lightbox />
-{@render children()}
+<div class="flex flex-col min-h-screen">
+	{@render children()}
+	<Footer />
+</div>
