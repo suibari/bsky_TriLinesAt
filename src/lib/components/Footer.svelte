@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Github } from "lucide-svelte";
+  import { Github, Info } from "lucide-svelte";
   import { t } from "$lib/i18n";
+  import { isAboutOpen } from "$lib/stores/ui";
 </script>
 
 <footer
@@ -21,6 +22,15 @@
 
     <!-- Social Links -->
     <div class="flex items-center gap-6">
+      <button
+        class="text-slate-400 hover:text-fuchsia-400 transition-colors flex items-center gap-2"
+        on:click={() => isAboutOpen.set(true)}
+        title={$t("about.button")}
+      >
+        <Info size={20} />
+        <span class="sr-only">{$t("about.button")}</span>
+      </button>
+
       <a
         href="https://bsky.app/profile/suibari.com"
         target="_blank"

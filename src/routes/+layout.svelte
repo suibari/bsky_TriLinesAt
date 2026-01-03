@@ -3,6 +3,7 @@
 	import { onMount } from "svelte";
 	import Lightbox from "$lib/components/Lightbox.svelte";
 	import Footer from "$lib/components/Footer.svelte";
+	import AboutModal from "$lib/components/AboutModal.svelte";
 
 	let { children } = $props();
 
@@ -30,6 +31,7 @@
 </svelte:head>
 
 <Lightbox />
+<AboutModal />
 <div class="flex flex-col min-h-screen">
 	{@render children()}
 	<Footer />

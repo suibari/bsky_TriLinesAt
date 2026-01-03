@@ -11,6 +11,7 @@
   import { Agent } from "@atproto/api";
   import { t, locale } from "$lib/i18n";
   import { calculateRankings, type Rankings } from "$lib/ranking";
+  import { isAboutOpen } from "$lib/stores/ui";
 
   // State
   // State
@@ -391,6 +392,13 @@
         <Button variant="primary" onclick={handleSignIn}>
           {$t("auth.signin")}
         </Button>
+
+        <button
+          class="text-sm text-slate-400 hover:text-white transition-colors underline decoration-slate-600 hover:decoration-white underline-offset-4"
+          on:click={() => isAboutOpen.set(true)}
+        >
+          {$t("about.button")}
+        </button>
 
         <div
           class="flex items-center gap-3 text-xs font-medium tracking-widest"
