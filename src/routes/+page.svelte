@@ -264,6 +264,11 @@
     translateX = deltaX;
   }
 
+  function getDateHeader(isoString: string) {
+    const d = new Date(isoString);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
   async function animateTabSwitch(
     direction: "left" | "right",
     loadCallback: () => void,
@@ -604,7 +609,28 @@
             </p>
           </div>
         {:else}
-          {#each entries as entry (entry.uri)}
+          {#each entries as entry, i (entry.uri)}
+            {@const currentDate = getDateHeader(entry.createdAt)}
+            {@const prevDate =
+              i > 0 ? getDateHeader(entries[i - 1].createdAt) : null}
+            {@const isToday =
+              currentDate === getDateHeader(new Date().toISOString())}
+
+            {#if (i === 0 || currentDate !== prevDate) && !isToday}
+              <div class="flex items-center gap-4 py-4 opacity-70">
+                <div
+                  class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
+                ></div>
+                <span
+                  class="text-xs font-mono font-bold text-fuchsia-300 tracking-widest"
+                  >{currentDate}</span
+                >
+                <div
+                  class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
+                ></div>
+              </div>
+            {/if}
+
             <DiaryCard
               {entry}
               author={profiles[entry.authorDid]}
