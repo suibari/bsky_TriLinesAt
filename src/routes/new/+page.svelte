@@ -104,7 +104,7 @@
   }
 </script>
 
-<div class="max-w-xl mx-auto px-4 py-6 min-h-screen pb-20">
+<div class="w-full max-w-xl mx-auto px-4 py-6 min-h-screen pb-20">
   <header class="flex items-center justify-between mb-8">
     <a
       href="/"
