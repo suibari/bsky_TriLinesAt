@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { session, initSession, signIn, signOut } from "$lib/auth/session";
-  import { getFollows, getGlobalFeed } from "$lib/bsky";
+  import { getFollows, getGlobalFeed, getProfiles } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import { Edit3, Compass, Users, LogOut, Trophy } from "lucide-svelte";
@@ -13,12 +13,14 @@
   import { calculateRankings, type Rankings } from "$lib/ranking";
 
   // State
+  // State
   let activeTab: "following" | "global" | "ranking" = "following";
   let entries: any[] = [];
   let loading = true;
   let loadingMore = false;
   let cursor: string | undefined = undefined;
   let profiles: Record<string, any> = {};
+  let follows: string[] = []; // Changed to string[] for easier filtering
 
   let rankingData: Rankings = { total: [], streak: [] };
   let rankingMode: "total" | "streak" = "total";
@@ -30,7 +32,7 @@
     initSession().then(() => {
       if ($session.isAuthenticated) {
         loadSelfProfile();
-        loadFollowing(true);
+        initialLoad();
       }
     });
 
@@ -38,8 +40,9 @@
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && cursor && !loadingMore && !loading) {
-          if (activeTab === "following") loadFollowing(false);
-          if (activeTab === "global") loadGlobal(false);
+          if (activeTab === "following" || activeTab === "global") {
+            fetchMorePosts().then(() => updateFilteredEntries());
+          }
         }
       },
       { rootMargin: "200px" },
@@ -83,115 +86,73 @@
     }
   }
 
-  async function loadFollowing(reset = true) {
-    if (!$session.agent) return;
-    if (reset) {
-      loading = true;
-      entries = [];
-      cursor = undefined;
-    } else {
-      loadingMore = true;
-    }
+  // --- Core Logic ---
 
+  let allPosts: any[] = []; // Cache of all fetched global posts
+
+  async function fetchMorePosts() {
+    if (loadingMore) return;
+    loadingMore = true;
     try {
-      if (activeTab !== "following") activeTab = "following";
-
-      // 1. Get follows (cached ideally, but fast enough)
-      const follows = await getFollows($session.did!);
-      const followDids = new Set(follows.map((f) => f.did));
-      followDids.add($session.did!);
-
-      // 2. Get Global Feed chunk
-      const result = await getGlobalFeed(cursor);
-      const globalPosts = result.posts;
+      const result = await getGlobalFeed(cursor, 50);
       cursor = result.cursor;
 
-      const filteredEntries = globalPosts.filter((entry: any) =>
-        followDids.has(entry.authorDid),
-      );
+      // Append to master list
+      allPosts = [...allPosts, ...result.posts];
 
-      // 3. Get profiles for authors
-      const authorDids = [
-        ...new Set(
-          filteredEntries.map((e: any) => e.authorDid).filter(Boolean),
-        ),
-      ];
-      if (authorDids.length > 0) {
-        const missingDids = authorDids.filter(
-          (did) => !profiles[did as string],
-        );
+      const newDids = [...new Set(result.posts.map((p: any) => p.authorDid))];
+      const profilesToFetch = newDids.filter((did) => !profiles[did as string]);
 
-        if (missingDids.length > 0) {
-          try {
-            const { data } = await $session.agent.app.bsky.actor.getProfiles({
-              actors: missingDids as string[],
-            });
-            const newProfiles = { ...profiles };
-            data.profiles.forEach((p) => (newProfiles[p.did] = p));
-            profiles = newProfiles;
-          } catch (e) {
-            console.warn("Failed to fetch profiles", e);
-          }
-        }
-      }
-
-      if (reset) {
-        entries = filteredEntries;
-      } else {
-        entries = [...entries, ...filteredEntries];
+      if (profilesToFetch.length > 0) {
+        const newProfiles = await getProfiles(profilesToFetch as string[]);
+        profiles = { ...profiles, ...newProfiles };
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to fetch more posts", e);
     } finally {
-      loading = false;
       loadingMore = false;
     }
   }
 
-  async function loadGlobal(reset = true) {
-    if (!$session.agent) return;
-    if (reset) {
-      loading = true;
-      entries = [];
-      cursor = undefined;
-    } else {
-      loadingMore = true;
+  function updateFilteredEntries() {
+    if (activeTab === "following") {
+      entries = allPosts.filter(
+        (p) => follows.includes(p.authorDid) || p.authorDid === $session.did,
+      );
+    } else if (activeTab === "global") {
+      entries = allPosts;
     }
+  }
 
+  // --- Tab Switchers (Optimized) ---
+
+  // These no longer fetch data, just switch view
+  function switchToFollowing() {
+    activeTab = "following";
+    updateFilteredEntries();
+  }
+
+  function switchToGlobal() {
+    activeTab = "global";
+    updateFilteredEntries();
+  }
+
+  // Initial Load (Consolidated)
+  async function initialLoad() {
+    loading = true;
     try {
-      if (activeTab !== "global") activeTab = "global";
+      if (!$session.agent) return;
 
-      const result = await getGlobalFeed(cursor);
-      const posts = result.posts;
-      cursor = result.cursor;
+      // Get Follows
+      const f = await getFollows($session.did!);
+      follows = f.map((p) => p.did);
 
-      const authorDids = [
-        ...new Set(posts.map((p: any) => p.authorDid).filter(Boolean)),
-      ] as string[];
-
-      if (authorDids.length > 0) {
-        try {
-          const { data } = await $session.agent.app.bsky.actor.getProfiles({
-            actors: authorDids,
-          });
-          const newProfiles = { ...profiles };
-          data.profiles.forEach((p) => (newProfiles[p.did] = p));
-          profiles = newProfiles;
-        } catch (e) {
-          console.warn("Failed to fetch global profiles", e);
-        }
-      }
-
-      if (reset) {
-        entries = posts;
-      } else {
-        entries = [...entries, ...posts];
-      }
+      await fetchMorePosts();
+      updateFilteredEntries();
     } catch (e) {
       console.error(e);
     } finally {
       loading = false;
-      loadingMore = false;
     }
   }
 
@@ -328,16 +289,16 @@
       if (translateX > 0) {
         // Swipe Right (Previous Tab)
         if (activeTab === "global") {
-          animateTabSwitch("right", () => loadFollowing(true));
+          animateTabSwitch("right", () => switchToFollowing());
           return;
         } else if (activeTab === "ranking") {
-          animateTabSwitch("right", () => loadGlobal(true));
+          animateTabSwitch("right", () => switchToGlobal());
           return;
         }
       } else {
         // Swipe Left (Next Tab)
         if (activeTab === "following") {
-          animateTabSwitch("left", () => loadGlobal(true));
+          animateTabSwitch("left", () => switchToGlobal());
           return;
         } else if (activeTab === "global") {
           animateTabSwitch("left", () => loadRanking());
@@ -492,7 +453,7 @@
           'following'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-slate-400 hover:text-white'}"
-          on:click={() => loadFollowing(true)}
+          on:click={() => switchToFollowing()}
         >
           <Users size={16} />
           <span class="whitespace-nowrap">{$t("feed.following")}</span>
@@ -502,7 +463,7 @@
           'global'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-slate-400 hover:text-white'}"
-          on:click={() => loadGlobal(true)}
+          on:click={() => switchToGlobal()}
         >
           <Compass size={16} />
           <span class="whitespace-nowrap">{$t("feed.global")}</span>

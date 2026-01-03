@@ -342,6 +342,21 @@ export async function getAllEntriesForRanking() {
   return allPosts;
 }
 
+// Helper to get profiles (ensures agent is available)
+export async function getProfiles(actors: string[]) {
+  const { session } = await import("$lib/auth/session");
+  const s = get(session);
+  if (!s.agent) throw new Error("Not authenticated");
+
+  const { data } = await s.agent.app.bsky.actor.getProfiles({
+    actors,
+  });
+  return data.profiles.reduce((acc, p) => {
+    acc[p.did] = p;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
 export async function getFollows(did: string) {
   const agent = new Agent('https://api.bsky.app');
   const { data } = await agent.app.bsky.graph.getFollows({
