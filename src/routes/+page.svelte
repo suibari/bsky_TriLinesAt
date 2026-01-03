@@ -25,6 +25,32 @@
   let rankingData: Rankings = { total: [], streak: [] };
   let rankingMode: "total" | "streak" = "total";
 
+  function handleEntryUpdate(e: CustomEvent) {
+    const { uri, isLiked, likeCount, viewerLike } = e.detail;
+
+    // Update in allPosts
+    const targetIndex = allPosts.findIndex((p) => p.uri === uri);
+    if (targetIndex !== -1) {
+      allPosts[targetIndex] = {
+        ...allPosts[targetIndex],
+        likeCount: likeCount,
+        viewer: {
+          ...allPosts[targetIndex].viewer,
+          like: viewerLike,
+        },
+      };
+      // Also update current view 'entries' to reflect immediately if needed
+      // (Though Svelte might not react deeply if we don't reassign entries)
+      // Since entries is derived from allPosts via updateFilteredEntries,
+      // let's re-run filtering or manually update the entry in `entries` too.
+      // Updating `entries` directly is faster for the UI.
+      const entryIndex = entries.findIndex((p) => p.uri === uri);
+      if (entryIndex !== -1) {
+        entries[entryIndex] = allPosts[targetIndex];
+      }
+    }
+  }
+
   // Element references for infinite scroll
   let sentinel: HTMLElement;
 
@@ -582,8 +608,10 @@
             <DiaryCard
               {entry}
               author={profiles[entry.authorDid]}
+              on:update={handleEntryUpdate}
               on:delete={(e) => {
                 entries = entries.filter((item) => item.uri !== e.detail.uri);
+                allPosts = allPosts.filter((item) => item.uri !== e.detail.uri);
               }}
             />
           {/each}
