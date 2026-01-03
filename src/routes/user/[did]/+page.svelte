@@ -94,7 +94,15 @@
     {:else if useProfile}
       <!-- Profile Header -->
       <div class="flex flex-col items-center text-center space-y-4 py-6">
-        <Avatar src={useProfile.avatar} size="xl" ring />
+        <a
+          href="https://bsky.app/profile/{useProfile.handle}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:opacity-80 transition-opacity"
+          title={$t("card.view_on_bsky")}
+        >
+          <Avatar src={useProfile.avatar} size="xl" ring />
+        </a>
         <div>
           <h2 class="text-2xl font-bold">
             {useProfile.displayName || useProfile.handle}

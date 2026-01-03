@@ -312,20 +312,22 @@
     {#if likeAvatars.length > 0}
       <div class="flex items-center -space-x-2 overflow-hidden ml-2">
         {#each likeAvatars as profile}
-          <div
-            class="w-6 h-6 rounded-full border border-slate-900 bg-slate-800 ring-2 ring-slate-900"
-            title={profile.handle}
+          <a
+            href="/user/{profile.did}"
+            class="block w-6 h-6 rounded-full border border-slate-900 bg-slate-800 ring-2 ring-slate-900 overflow-hidden hover:scale-110 transition-transform"
+            title={`${profile.displayName || profile.handle} (@${profile.handle})`}
+            on:click|stopPropagation
           >
             {#if profile.avatar}
               <img
                 src={profile.avatar}
                 alt={profile.handle}
-                class="w-full h-full object-cover rounded-full"
+                class="w-full h-full object-cover"
               />
             {:else}
-              <div class="w-full h-full bg-slate-700 rounded-full"></div>
+              <div class="w-full h-full bg-slate-700"></div>
             {/if}
-          </div>
+          </a>
         {/each}
         {#if likes > 5}
           <div class="pl-3 text-xs text-slate-500 font-medium">
