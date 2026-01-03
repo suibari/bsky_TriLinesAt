@@ -248,12 +248,118 @@
     }
   }
 
+  // Swipe Logic
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let translateX = 0;
+  let isSwiping = false;
+
+  function handleTouchStart(e: TouchEvent) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+    isSwiping = true;
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (!isSwiping) return;
+
+    const touchCurrentX = e.changedTouches[0].screenX;
+    const touchCurrentY = e.changedTouches[0].screenY;
+
+    const deltaX = touchCurrentX - touchStartX;
+    const deltaY = touchCurrentY - touchStartY;
+
+    // Determine if scrolling vertically
+    if (Math.abs(deltaY) > Math.abs(deltaX)) {
+      return;
+    }
+
+    translateX = deltaX;
+  }
+
+  async function animateTabSwitch(
+    direction: "left" | "right",
+    loadCallback: () => void,
+  ) {
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 375;
+    const exitTo = direction === "right" ? screenWidth : -screenWidth;
+    const enterFrom = direction === "right" ? -screenWidth : screenWidth;
+
+    // 1. Animate Out
+    isSwiping = false; // Enable transition
+    translateX = exitTo;
+
+    // Wait for transition
+    await new Promise((r) => setTimeout(r, 300));
+
+    // 2. Switch Data/State (Loading becomes true)
+    loadCallback();
+
+    // 3. Reset to Enter Position (Instant)
+    isSwiping = true; // Disable transition for instant jump
+    translateX = enterFrom;
+
+    // 4. Animate In
+    // Force reflow/next frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        isSwiping = false; // Enable transition
+        translateX = 0;
+      });
+    });
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    isSwiping = false;
+
+    // Prevent swipe during loading or on landing page (if not authenticated)
+    if (
+      loading ||
+      (activeTab === "ranking" && loading) ||
+      !$session.isAuthenticated
+    ) {
+      translateX = 0;
+      return;
+    }
+
+    const SWIPE_THRESHOLD = 80;
+
+    if (Math.abs(translateX) > SWIPE_THRESHOLD) {
+      if (translateX > 0) {
+        // Swipe Right (Previous Tab)
+        if (activeTab === "global") {
+          animateTabSwitch("right", () => loadFollowing(true));
+          return;
+        } else if (activeTab === "ranking") {
+          animateTabSwitch("right", () => loadGlobal(true));
+          return;
+        }
+      } else {
+        // Swipe Left (Next Tab)
+        if (activeTab === "following") {
+          animateTabSwitch("left", () => loadGlobal(true));
+          return;
+        } else if (activeTab === "global") {
+          animateTabSwitch("left", () => loadRanking());
+          return;
+        }
+      }
+    }
+
+    translateX = 0;
+  }
+
   function toggleLocale() {
     locale.update((l) => (l === "en" ? "ja" : "en"));
   }
 </script>
 
-<div class="min-h-screen text-slate-100 pb-20">
+<div
+  class="min-h-screen text-slate-100 pb-20 overflow-x-hidden touch-pan-y"
+  on:touchstart={handleTouchStart}
+  on:touchmove={handleTouchMove}
+  on:touchend={handleTouchEnd}
+>
   {#if $session.loading}
     <!-- Optional: Loading Spinner or just blank -->
     <div class="flex items-center justify-center min-h-screen">
@@ -414,7 +520,12 @@
       </div>
 
       <!-- Feed -->
-      <div class="space-y-6 min-h-[50vh]">
+      <div
+        class="space-y-6 min-h-[50vh] {isSwiping
+          ? ''
+          : 'transition-transform duration-300 ease-out'}"
+        style="transform: translateX({translateX}px)"
+      >
         {#if loading}
           <div class="glass-panel p-6 animate-pulse space-y-4">
             <div class="flex gap-4">
