@@ -40,9 +40,18 @@
             {$t("about.developer.title")}
           </h3>
           <ul class="list-disc list-outside ml-4 space-y-2">
-            <li>{$t("about.developer.body")}</li>
+            <li>{@html $t("about.developer.body")}</li>
             <li>{$t("about.tech.body")}</li>
             <li>{$t("about.support.body")}</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 class="font-bold text-white mb-2 text-base">
+            {$t("about.oauth.title")}
+          </h3>
+          <ul class="list-disc list-outside ml-4 space-y-2">
+            <li>{@html $t("about.oauth.body")}</li>
           </ul>
         </section>
 
