@@ -9,21 +9,58 @@
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { t } from "$lib/i18n";
 
+  import { Confetti } from "svelte-confetti";
+  import { fade, scale } from "svelte/transition";
+
+  import { onMount } from "svelte";
+
   $: did = $page.params.did;
 
+  // Core State
   let entries: any[] = [];
   let useProfile: any | null = null;
   let loading = true;
+
+  // Celebration State
+  let showCelebration = false;
+  let celebrationMessage = "";
+  let streakCount = 0;
 
   $: if (did && $session.agent) {
     loadUser();
   }
 
-  // Handle reload on mount if directly navigating
-  import { onMount } from "svelte";
   onMount(() => {
     if (!$session.agent) {
-      initSession(); // will trigger reactive block above once authed
+      initSession();
+    }
+
+    // Check URL params for celebration
+    const created = $page.url.searchParams.get("created") === "true";
+    if (created && did === $session.did) {
+      const isFirst = $page.url.searchParams.get("isFirst") === "true";
+      const streak = parseInt($page.url.searchParams.get("streak") || "0");
+      streakCount = streak;
+
+      if (isFirst) {
+        celebrationMessage = $t("celebration.first");
+      } else if (streak >= 2) {
+        celebrationMessage = $t("celebration.streak").replace(
+          "{n}",
+          streak.toString(),
+        );
+      } else {
+        celebrationMessage = $t("celebration.posted");
+      }
+
+      showCelebration = true;
+
+      // Clean up URL without reload
+      const newUrl = new URL($page.url);
+      newUrl.searchParams.delete("created");
+      newUrl.searchParams.delete("isFirst");
+      newUrl.searchParams.delete("streak");
+      window.history.replaceState({}, "", newUrl);
     }
   });
 
@@ -199,3 +236,45 @@
     </a>
   {/if}
 </div>
+
+{#if showCelebration}
+  <!-- Confetti Background -->
+  <div
+    class="fixed top-[-50px] left-0 h-[100vh] w-[100vw] flex justify-center overflow-hidden pointer-events-none z-[100]"
+  >
+    <Confetti
+      x={[-5, 5]}
+      y={[0, 0.1]}
+      delay={[-1000, 10000]}
+      duration={5000}
+      amount={400}
+      fallDistance="100vh"
+    />
+  </div>
+
+  <!-- Modal Overlay -->
+  <div
+    class="fixed inset-0 z-[101] flex items-center justify-center pointer-events-none p-4"
+  >
+    <div
+      class="glass-panel p-8 rounded-2xl border border-white/20 shadow-2xl shadow-fuchsia-500/20 text-center pointer-events-auto transform max-w-sm w-full"
+      in:scale={{ start: 0.8, duration: 400 }}
+      out:fade
+    >
+      <h3
+        class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-orange-300 to-yellow-300 mb-4 drop-shadow-[0_2px_10px_rgba(255,200,0,0.5)]"
+      >
+        {$t("celebration.congrats")}
+      </h3>
+      <p class="text-lg text-white font-medium mb-6">
+        {celebrationMessage}
+      </p>
+      <button
+        class="glass-btn px-8 py-3 rounded-full text-base font-bold text-white hover:scale-105 active:scale-95 transition-transform"
+        on:click={() => (showCelebration = false)}
+      >
+        OK
+      </button>
+    </div>
+  </div>
+{/if}

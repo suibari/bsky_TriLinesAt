@@ -14,6 +14,9 @@
 
   import { onMount } from "svelte";
 
+  import { getEntries } from "$lib/bsky";
+  import { calculateRankings } from "$lib/ranking";
+
   // Redirect if not authed
   $: if (!$session.loading && !$session.isAuthenticated) {
     goto("/");
@@ -30,7 +33,12 @@
   let submitting = false;
   let isLoaded = false;
 
-  onMount(() => {
+  // Stats for calculation
+  let currentStreak = 0;
+  let totalCount = 0;
+  let lastPostDate: string | undefined;
+
+  onMount(async () => {
     // Load settings from localStorage
     if (typeof localStorage !== "undefined") {
       const storedRemember =
@@ -43,6 +51,22 @@
       }
     }
     isLoaded = true;
+
+    // Fetch current stats if authed
+    if ($session.isAuthenticated && $session.did) {
+      try {
+        const myEntries = await getEntries($session.did);
+        const { total, streak } = calculateRankings(myEntries);
+        const myTotal = total.find((r) => r.did === $session.did);
+        const myStreak = streak.find((r) => r.did === $session.did);
+
+        totalCount = myTotal?.count || 0;
+        currentStreak = myStreak?.count || 0;
+        lastPostDate = myStreak?.lastPostDate; // Using streak's last post date ensures continuity logic matches
+      } catch (e) {
+        console.warn("Failed to fetch pre-post stats", e);
+      }
+    }
   });
 
   // Save settings when changed
@@ -51,8 +75,6 @@
     if (rememberSettings) {
       localStorage.setItem("settings.shareToBluesky", String(shareToBluesky));
     } else {
-      // Optional: Clear stored preference if remember is OFF, or just don't load it.
-      // Keeping it simple: just don't load it next time, but we can clear it to be cleaner
       localStorage.removeItem("settings.shareToBluesky");
     }
   }
@@ -89,12 +111,54 @@
     }
 
     submitting = true;
+
     try {
       await createDiary(
         lines.map((l) => ({ text: l.text, image: l.image })),
         shareToBluesky,
       );
-      goto(`/user/${$session.did}`);
+
+      // Calculate post-success stats (Optimistic)
+      let newStreak = currentStreak;
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+      // Logic:
+      // If we already had a post today (lastPostDate === today), streak doesn't increase.
+      // If last post was yesterday, streak increments.
+      // If last post was older or null (0), streak becomes 1.
+
+      // Parse lastPostDate to YYYY-MM-DD
+      let lastDateYMD = "";
+      if (lastPostDate) {
+        const d = new Date(lastPostDate);
+        lastDateYMD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayYMD = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+
+      // Wait calculateRankings typically handles timezone, but let's be approximate/robust.
+      // If currentStreak > 0, it means it's active (today/yesterday).
+      if (currentStreak > 0) {
+        if (lastDateYMD === today) {
+          // Already posted today, no change
+          newStreak = currentStreak;
+        } else {
+          // Since it's active (>0), it must be yesterday (or earlier today?)
+          // Simple increment
+          newStreak = currentStreak + 1;
+        }
+      } else {
+        // Streak was broken or 0
+        newStreak = 1;
+      }
+
+      const isFirst = totalCount === 0;
+
+      goto(
+        `/user/${$session.did}?created=true&streak=${newStreak}&isFirst=${isFirst}`,
+      );
     } catch (e) {
       console.error(e);
       alert("Failed to post diary.");

@@ -53,6 +53,10 @@ export const translations = {
     "about.privacy.body": "Since diary data is stored in the PDS, it is public information like Bluesky posts. Please do not write private information or information that may cause trouble to others.",
     "about.disclaimer.title": "Other",
     "about.disclaimer.body": "The text on this page is subject to change without notice.",
+    "celebration.congrats": "Congratulations!",
+    "celebration.first": "You've posted your first diary entry!",
+    "celebration.streak": "Diary streak updated to {n} days!",
+    "celebration.posted": "Diary entry posted!",
   },
   ja: {
     "app.title": "TriLinesAt",
@@ -104,6 +108,10 @@ export const translations = {
     "about.privacy.body": "日記データはPDSに置かれる以上、Blueskyのポストと同等の公開情報です。プライベートな情報や他人に迷惑が掛かる情報は記載しないでください。",
     "about.disclaimer.title": "その他",
     "about.disclaimer.body": "このページに記載される文章は予告なく変更することがあります。",
+    "celebration.congrats": "おめでとうございます！",
+    "celebration.first": "初めての日記を登録しました！",
+    "celebration.streak": "日記継続{n}日更新中！",
+    "celebration.posted": "日記を登録しました！",
   }
 };
 

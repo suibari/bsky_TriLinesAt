@@ -28,6 +28,7 @@
 		"@atproto/api": "^0.18.9",
 		"@atproto/oauth-client-browser": "^0.3.38",
 		"lucide-svelte": "^0.562.0",
+		"svelte-confetti": "^2.3.2",
 		"vite-plugin-pwa": "^1.2.0"
 	}
 }
