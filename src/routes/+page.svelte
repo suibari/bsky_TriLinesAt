@@ -198,10 +198,10 @@
       // Calculate
       rankingData = calculateRankings(posts);
 
-      // Fetch profiles for top 20 of each
+      // Fetch profiles for top 50 of each (matching the UI display limit)
       const topDids = new Set([
-        ...rankingData.total.slice(0, 20).map((r) => r.did),
-        ...rankingData.streak.slice(0, 20).map((r) => r.did),
+        ...rankingData.total.slice(0, 50).map((r) => r.did),
+        ...rankingData.streak.slice(0, 50).map((r) => r.did),
       ]);
 
       const authorDids = Array.from(topDids);
@@ -210,13 +210,9 @@
         const missingDids = authorDids.filter((did) => !profiles[did]);
         if (missingDids.length > 0) {
           try {
-            // Batch in chunks of 25 if needed, but 40 is fine
-            const { data } = await $session.agent.app.bsky.actor.getProfiles({
-              actors: missingDids,
-            });
-            const newProfiles = { ...profiles };
-            data.profiles.forEach((p) => (newProfiles[p.did] = p));
-            profiles = newProfiles;
+            // Use helper with batching support
+            const newProfilesMap = await getProfiles(missingDids);
+            profiles = { ...profiles, ...newProfilesMap };
           } catch (e) {
             console.warn("Failed to fetch ranking profiles", e);
           }

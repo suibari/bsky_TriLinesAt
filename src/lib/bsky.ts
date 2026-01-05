@@ -348,10 +348,26 @@ export async function getProfiles(actors: string[]) {
   const s = get(session);
   if (!s.agent) throw new Error("Not authenticated");
 
-  const { data } = await s.agent.app.bsky.actor.getProfiles({
-    actors,
-  });
-  return data.profiles.reduce((acc, p) => {
+  const chunks = [];
+  for (let i = 0; i < actors.length; i += 25) {
+    chunks.push(actors.slice(i, i + 25));
+  }
+
+  const results = await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const { data } = await s.agent!.app.bsky.actor.getProfiles({
+        actors: chunk,
+      });
+      return data.profiles;
+    } catch (e) {
+      console.warn("Failed to fetch profile chunk", chunk, e);
+      return [];
+    }
+  }));
+
+  const allProfiles = results.flat();
+
+  return allProfiles.reduce((acc, p) => {
     acc[p.did] = p;
     return acc;
   }, {} as Record<string, any>);
