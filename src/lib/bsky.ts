@@ -375,11 +375,24 @@ export async function getProfiles(actors: string[]) {
 
 export async function getFollows(did: string) {
   const agent = new Agent('https://api.bsky.app');
-  const { data } = await agent.app.bsky.graph.getFollows({
-    actor: did,
-    limit: 50,
-  });
-  return data.follows;
+  let follows: any[] = [];
+  let cursor: string | undefined;
+
+  // Limit to 2000 users (20 loops * 100 limit)
+  for (let i = 0; i < 20; i++) {
+    const { data } = await agent.app.bsky.graph.getFollows({
+      actor: did,
+      limit: 100, // Max allowed per request
+      cursor: cursor,
+    });
+
+    follows = [...follows, ...data.follows];
+    cursor = data.cursor;
+
+    if (!cursor) break;
+  }
+
+  return follows;
 }
 
 export async function likeEntry(uri: string, cid: string) {
