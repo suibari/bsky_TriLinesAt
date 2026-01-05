@@ -1,8 +1,22 @@
 import { get } from 'svelte/store';
 import { session } from './auth/session';
+import { TID } from '@atproto/common-web';
 import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
 import { Agent, RichText, type BlobRef } from '@atproto/api';
 import { t, locale } from './i18n';
+
+// Helper to extract timestamp from TID rkey
+// Using official library for reliability.
+function timestampFromRkey(rkey: string): string {
+  try {
+    const tid = TID.fromStr(rkey);
+    const micros = tid.timestamp();
+    return new Date(micros / 1000).toISOString();
+  } catch (e) {
+    return new Date().toISOString();
+  }
+}
+
 
 // HUB_URI is the target for Global Feed aggregation via Constellation.
 // We link to the Developer's Profile Record (or a system DID) to ensure it's indexed.
@@ -218,7 +232,12 @@ export async function getEntries(did: string) {
   if (did !== sessionDid) {
     // Only resolve PDS if it's NOT the current user
     try {
-      const pds = await getPds(did);
+      let pds = pdsCache.get(did);
+      if (!pds) {
+        pds = await getPds(did);
+        pdsCache.set(did, pds);
+      }
+
       if (pds) {
         // Check if current agent is already on this PDS? (Assuming bsky.social default)
         // Actually, just creating a new unauthed agent for public read is fine for OTHER users.
@@ -244,6 +263,35 @@ export async function getEntries(did: string) {
 // HUB_URI is the target for Global Feed aggregation via Constellation.
 // We link to the Developer's Profile Record to ensure it's indexed as a valid backlink.
 
+// Module-level PDS cache to persist across calls
+const pdsCache = new Map<string, string>();
+
+// Helper to limit concurrency
+async function limitConcurrency<T>(items: any[], limit: number, fn: (item: any) => Promise<T>): Promise<T[]> {
+  const results: T[] = [];
+  const executing: Promise<void>[] = [];
+
+  for (const item of items) {
+    const p = fn(item).then(res => {
+      results.push(res);
+    });
+    executing.push(p);
+
+    // Clean up finished promises
+    const clean = () => {
+      const idx = executing.indexOf(p);
+      if (idx !== -1) executing.splice(idx, 1);
+    }
+    p.then(clean).catch(clean);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  await Promise.all(executing);
+  return results;
+}
+
 export async function getGlobalFeed(cursor?: string, limit = 50) {
   // Use Constellation to find all diary entries linking to the HUB_URI
   const endpoint = 'https://constellation.microcosm.blue/links';
@@ -266,11 +314,8 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
     const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
     const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
 
-    // Constellation minimal format check
-    // Some responses only give {did, collection, rkey}. We need to fetch the actual records.
-    const pdsCache: Record<string, string> = {};
-
-    const entries = await Promise.all(rawLinks.map(async (item: any) => {
+    // Use concurrency limited processing
+    const entries = await limitConcurrency(rawLinks, 10, async (item: any) => {
       try {
         // Normalize fields (Constellation varies between 'author'/'did' and 'uri'/'rkey')
         let did = item.author || item.did;
@@ -306,14 +351,15 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
         }
 
         // Otherwise, we MUST fetch it from a PDS
-        // We try to resolve the specific PDS for this user
-        let pds = pdsCache[did];
+        // Check cache first
+        let pds = pdsCache.get(did);
         if (!pds) {
           try {
             pds = await getPds(did);
-            pdsCache[did] = pds;
+            pdsCache.set(did, pds);
           } catch {
             pds = 'https://bsky.social'; // Fallback
+            // Don't cache fallback errors forever, but maybe for this session it's fine
           }
         }
 
@@ -334,7 +380,7 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
         // console.warn("Failed to resolve global entry", e);
         return null;
       }
-    }));
+    });
 
     // Filter out failed resolutions and sort
     const posts = entries.filter(Boolean) as any[];
@@ -347,32 +393,91 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
   }
 }
 
-export async function getAllEntriesForRanking() {
-  // Constellation links limit is typically 100, so we must loop.
-  const MAX_ITEMS = 10000;
-  let allPosts: any[] = [];
-  let cursor: string | undefined = undefined;
+// Helper to get raw Constellation links without resolving records
+async function getGlobalFeedLinks(cursor?: string, limit = 50) {
+  const endpoint = 'https://constellation.microcosm.blue/links';
+  const url = new URL(endpoint);
+  url.searchParams.set('target', HUB_URI);
+  url.searchParams.set('collection', IDS.TriLinesEntry);
+  url.searchParams.set('path', '.hubRef');
+  url.searchParams.set('limit', limit.toString());
+  if (cursor) {
+    url.searchParams.set('cursor', cursor);
+  }
 
-  // Safety break to prevent infinite loops logic error
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error('Constellation feed fetch failed');
+
+    const data = await res.json();
+    const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
+    const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
+
+    return { links: rawLinks, cursor: nextCursor };
+  } catch (e) {
+    console.warn("Global feed links fetch failed", e);
+    return { links: [], cursor: undefined };
+  }
+}
+
+export async function getAllEntriesForRanking() {
+  // 1. Fetch all links from Constellation first
+  const MAX_ITEMS = 10000;
+  let allLinks: any[] = [];
+  let cursor: string | undefined = undefined;
   let loops = 0;
-  const MAX_LOOPS = 25; // 25 * 100 = 2500 approx
+  const MAX_LOOPS = 40; // 40 * 100 = 4000 links approx (adjusted loop count)
 
   do {
-    // Determine limit for this request (try to get 100 at a time)
-    const { posts, cursor: nextCursor } = await getGlobalFeed(cursor, 100);
+    // Fetch raw links only (fast)
+    const { links, cursor: nextCursor } = await getGlobalFeedLinks(cursor, 100);
+    if (links.length === 0) break;
 
-    if (posts.length === 0) break;
-
-    allPosts = [...allPosts, ...posts];
+    allLinks = [...allLinks, ...links];
     cursor = nextCursor;
     loops++;
 
-    // Break if we have enough or no more pages
-    if (allPosts.length >= MAX_ITEMS) break;
-
+    if (allLinks.length >= MAX_ITEMS) break;
   } while (cursor && loops < MAX_LOOPS);
 
-  return allPosts;
+  // 2. Convert to Ranking Entries directly (Zero Fetch)
+  const entries = allLinks.map((link) => {
+    const did = link.author || link.did;
+    const rkey = link.rkey || link.uri?.split('/').pop();
+    const uri = link.uri || `at://${did}/${IDS.TriLinesEntry}/${rkey}`;
+    const cid = link.cid || 'unknown'; // CID is not critical for ranking (createdAt is)
+
+    // Optimization: Infer createdAt from rkey
+    let createdAt: any = new Date().toISOString();
+    try {
+      if (rkey) {
+        createdAt = timestampFromRkey(rkey);
+      }
+    } catch (e) {
+      // Fallback to now or ignore. 
+      // If we can't parse TID, it might be a custom rkey. 
+      // Ideally we would fetch, but "SKIP PDS FETCHING ENTIRELY" is the goal.
+      // We accept inaccurate date for custom rkeys (very rare in this app).
+    }
+
+    return {
+      uri,
+      cid,
+      authorDid: did,
+      lines: [], // Not needed for ranking
+      createdAt: createdAt as any,
+      // sharedPost? hubRef? Not needed for ranking logic
+    };
+  });
+
+  // 3. Filter invalid dates if necessary, or just sort.
+  // Some createdAts might be "now" if failed parse, which pushes them to top.
+  // That's acceptable for "unknown" vs crashing or slow fetch.
+
+  // Sort by createdAt descending
+  entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return entries;
 }
 
 // Helper to get profiles (ensures agent is available)
