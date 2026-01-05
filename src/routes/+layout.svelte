@@ -28,6 +28,30 @@
 	<!-- PWA Manifest Link -->
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#0f172a" />
+
+	<!-- SEO & OGP -->
+	<title>TriLinesAt</title>
+	<meta
+		name="description"
+		content="Five minutes before bed, three lines of journaling. A social diary app on Bluesky."
+	/>
+
+	<meta property="og:title" content="TriLinesAt" />
+	<meta
+		property="og:description"
+		content="Five minutes before bed, three lines of journaling. A social diary app on Bluesky."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:image" content="/ogp.png" />
+	<meta property="og:site_name" content="TriLinesAt" />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="TriLinesAt" />
+	<meta
+		name="twitter:description"
+		content="Five minutes before bed, three lines of journaling. A social diary app on Bluesky."
+	/>
+	<meta name="twitter:image" content="/ogp.png" />
 </svelte:head>
 
 <Lightbox />
