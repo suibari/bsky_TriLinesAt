@@ -21,16 +21,55 @@ export async function uploadImage(blob: Blob): Promise<BlobRef> {
   return data.blob;
 }
 
+function getImageDims(blob: Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: 0, height: 0 });
+    };
+    img.src = url;
+  });
+}
+
 export async function createDiary(lines: { text: string; image?: Blob }[], shareToBluesky: boolean) {
   const agent = getAgent();
   const sessionDid = get(session).did!;
 
   // 1. Upload images
   const processedLines: TriLinesLine[] = [];
+
+  // Define type locally or import if available. 
+  // app.bsky.embed.images#image structure
+  interface EmbedImage {
+    image: BlobRef;
+    alt: string;
+    aspectRatio?: { width: number; height: number };
+  }
+  const embedImages: EmbedImage[] = [];
+
   for (const line of lines) {
     let imageBlob: BlobRef | undefined;
     if (line.image) {
-      imageBlob = await uploadImage(line.image);
+      const [uploaded, dims] = await Promise.all([
+        uploadImage(line.image),
+        getImageDims(line.image)
+      ]);
+      imageBlob = uploaded;
+
+      const embedImage: EmbedImage = {
+        image: imageBlob,
+        alt: line.text.slice(0, 300) || "Diary Image"
+      };
+      if (dims.width > 0 && dims.height > 0) {
+        embedImage.aspectRatio = dims;
+      }
+      embedImages.push(embedImage);
     }
     processedLines.push({
       text: line.text,
@@ -90,15 +129,9 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
           facets: rt.facets,
           createdAt,
           langs: [currentLocale],
-          embed: processedLines.filter(l => l.image).length > 0 ? {
+          embed: embedImages.length > 0 ? {
             $type: 'app.bsky.embed.images',
-            images: processedLines
-              .filter(l => l.image)
-              .slice(0, 4)
-              .map(l => ({
-                image: l.image!,
-                alt: l.text.slice(0, 300) || "Diary Image" // Use line text as alt, truncated
-              }))
+            images: embedImages.slice(0, 4)
           } : undefined
         },
       });
