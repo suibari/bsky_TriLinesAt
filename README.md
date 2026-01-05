@@ -1,38 +1,64 @@
-# sv
+# TriLinesAt
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+**TriLinesAt** is a social 3-line diary application built on the [AT Protocol](https://atproto.com/) (Bluesky).
+Based on the "Three Good Things" method, it encourages users to record three positive events before bed to foster a positive mindset.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+-   **3-Line Diary**: A simple interface to record three good things of the day.
+-   **Image Attachments**: Attach up to 4 images to your diary entry.
+-   **Social**:
+    -   **Following Feed**: See diary entries from users you follow.
+    -   **Global Feed**: Discover entries from all TriLinesAt users.
+    -   **Likes**: Interact with entries using the "Star" action (synced with PDS).
+-   **Data Sovereignty**: All diary entries are stored in the user's own **Personal Data Server (PDS)** in the `blue.trilinesat.diary` collection.
+-   **OAuth Authentication**: Secure login using Bluesky OAuth (no App Passwords required).
+-   **Gamification**:
+    -   **Streaks**: Track consecutive posting days.
+    -   **Rankings**: View top users by total posts and current streaks.
+    -   **Celebrations**: Fun confetti effects upon posting and achieving milestones.
+-   **PWA**: Installable as a Progressive Web App for a native-like experience.
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Tech Stack
 
-# create a new project in my-app
-npx sv create my-app
-```
+-   **Framework**: [SvelteKit](https://kit.svelte.dev/)
+-   **Styling**: [Tailwind CSS](https://tailwindcss.com/) (Glassmorphism design)
+-   **Protocol**: [AT Protocol](https://atproto.com/)
+    -   [`@atproto/oauth-client-browser`](https://www.npmjs.com/package/@atproto/oauth-client-browser) for authentication.
+    -   [`@atproto/api`](https://www.npmjs.com/package/@atproto/api) for PDS interactions.
+-   **Deployment**: Cloudflare Pages (`adapter-cloudflare`)
 
-## Developing
+## Development
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+### Prerequisites
 
-```sh
-npm run dev
+-   Node.js (v18+)
+-   npm
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+### Setup
 
-## Building
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/suibari/bsky_TriLinesAt.git
+    cd bsky_TriLinesAt
+    ```
 
-To create a production version of your app:
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
 
-```sh
-npm run build
-```
+3.  Start the development server:
+    ```bash
+    npm run dev
+    ```
 
-You can preview the production build with `npm run preview`.
+4.  Open `http://localhost:5173` in your browser.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+    > **Note**: OAuth requires a publicly accessible URL or a specific localhost configuration registered with the OAuth client. For local development, ensure your `client-metadata.json` matches your environment.
+
+## License
+
+MIT License
+
+Copyright (c) 2025 Suibari
