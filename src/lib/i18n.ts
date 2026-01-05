@@ -52,7 +52,7 @@ export const translations = {
     "about.privacy.title": "About Diary Creation",
     "about.privacy.body": "Since diary data is stored in the PDS, it is public information like Bluesky posts. Please do not write private information or information that may cause trouble to others.",
     "about.oauth.title": "About Authentication",
-    "about.oauth.body": "This app uses OAuth authentication. For the difference between OAuth and App Passwords, please see the <a href=\"https://whtwnd.com/bills-appworks.blue/3lyvtejbyy52m\" target=\"_blank\" class=\"text-fuchsia-400 hover:text-fuchsia-300 underline\">reference article</a>.",
+    "about.oauth.body": "This app uses OAuth authentication. For the difference between OAuth and App Passwords, please see the <a href=\"https://whtwnd.com/bills-appworks.blue/3mbocddojui23\" target=\"_blank\" class=\"text-fuchsia-400 hover:text-fuchsia-300 underline\">reference article</a>.",
     "about.disclaimer.title": "Other",
     "about.disclaimer.body": "The text on this page is subject to change without notice.",
     "celebration.congrats": "Congratulations!",
