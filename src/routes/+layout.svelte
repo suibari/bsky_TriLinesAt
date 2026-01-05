@@ -42,7 +42,7 @@
 		content="Five minutes before bed, three lines of journaling. A social diary app on Bluesky."
 	/>
 	<meta property="og:type" content="website" />
-	<meta property="og:image" content="/ogp.png" />
+	<meta property="og:image" content="https://trilinesat.suibari.com/ogp.png" />
 	<meta property="og:site_name" content="TriLinesAt" />
 
 	<meta name="twitter:card" content="summary_large_image" />
@@ -51,7 +51,7 @@
 		name="twitter:description"
 		content="Five minutes before bed, three lines of journaling. A social diary app on Bluesky."
 	/>
-	<meta name="twitter:image" content="/ogp.png" />
+	<meta name="twitter:image" content="https://trilinesat.suibari.com/ogp.png" />
 </svelte:head>
 
 <Lightbox />
