@@ -71,40 +71,49 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
 
     const latestDate = uniqueDates[0];
 
-    // If latest post is older than yesterday, streak is 0
-    // (Assuming we strictly require today or yesterday to trigger a "current" streak)
-    if (latestDate !== today && latestDate !== yesterday) {
-      streakRanking.push({ rank: 0, did, count: 0, lastPostDate: latestDate });
-      continue;
-    }
+    // Calculate Max Historical Streak
+    let maxStreak = 0;
+    let currentStreak = 0;
+    let prevDateStr: string | null = null;
 
-    let streak = 0;
-    // Check continuity
-    // e.g. [2024-01-05, 2024-01-04, 2024-01-02]
-    // 0: 05 - 1 = 04 (match index 1? yes) -> streak++
-    // 1: 04 - 1 = 03 (match index 2? no, 02) -> break
+    // Iterate through sorted dates (descending)
+    // Actually, to count consecutive easily, let's look at them.
+    // [2024-01-05, 2024-01-04, 2024-01-01]
 
-    // We treat the "head" of the streak as the anchor.
-    // If latest is today, we count backwards from today.
-    // If latest is yesterday, we count backwards from yesterday.
+    // Iterate and detect breaks.
+    // For simple max streak finding, we can just iterate.
 
-    let currentDateStr = latestDate;
-    streak = 1;
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const dateStr = uniqueDates[i];
 
-    for (let i = 1; i < uniqueDates.length; i++) {
-      const checkDate = new Date(currentDateStr);
-      checkDate.setDate(checkDate.getDate() - 1); // Expected previous day
-      const expectedPrevStr = getDid(checkDate.toISOString());
-
-      if (uniqueDates[i] === expectedPrevStr) {
-        streak++;
-        currentDateStr = expectedPrevStr;
+      if (prevDateStr === null) {
+        currentStreak = 1;
       } else {
-        break;
+        const date = new Date(dateStr);
+        const prev = new Date(prevDateStr);
+        // Diff in days. prev is newer (descending order)
+        // prev - date
+        const diffTime = prev.getTime() - date.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1) {
+          currentStreak++;
+        } else {
+          // Break in streak
+          if (currentStreak > maxStreak) {
+            maxStreak = currentStreak;
+          }
+          currentStreak = 1;
+        }
       }
+      prevDateStr = dateStr;
+    }
+    // Final check for the last running streak
+    if (currentStreak > maxStreak) {
+      maxStreak = currentStreak;
     }
 
-    streakRanking.push({ rank: 0, did, count: streak, lastPostDate: latestDate });
+    streakRanking.push({ rank: 0, did, count: maxStreak, lastPostDate: latestDate });
   }
 
   // Sort rankings
