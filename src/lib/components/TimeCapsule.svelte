@@ -28,13 +28,7 @@
     if (extracted.length > 0) {
       textPool = extracted;
     } else {
-      textPool = [
-        "Your past thoughts will appear here...",
-        "A starry sky of memories",
-        "Keep writing to fill the sky",
-        "Every day is a new star",
-        "Three lines a day...",
-      ];
+      textPool = [];
     }
   }
 
