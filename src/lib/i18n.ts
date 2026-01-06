@@ -59,6 +59,11 @@ export const translations = {
     "celebration.first": "You've posted your first diary entry!",
     "celebration.streak": "Diary streak updated to {n} days!",
     "celebration.posted": "Diary entry posted!",
+
+    // Settings
+    "settings.title": "Settings",
+    "settings.timecapsule": "Time Capsule (Show past entries)",
+    "settings.timecapsule_desc": "Display random lines from your past diary entries in the background of the editor.",
   },
   ja: {
     "app.title": "TriLinesAt",
@@ -116,6 +121,11 @@ export const translations = {
     "celebration.first": "初めての日記を登録しました！",
     "celebration.streak": "日記継続{n}日更新中！",
     "celebration.posted": "日記を登録しました！",
+
+    // Settings
+    "settings.title": "設定",
+    "settings.timecapsule": "タイムカプセル機能",
+    "settings.timecapsule_desc": "日記作成画面の背景に、過去の日記をランダムに表示します。",
   }
 };
 

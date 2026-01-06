@@ -12,6 +12,7 @@
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { t } from "$lib/i18n";
+  import { settings } from "$lib/stores/settings";
 
   import { onMount } from "svelte";
 
@@ -41,6 +42,7 @@
   let myEntries: any[] | undefined = undefined;
 
   onMount(async () => {
+    settings.init();
     // Load settings from localStorage
     if (typeof localStorage !== "undefined") {
       const storedRemember =
@@ -172,7 +174,9 @@
 </script>
 
 <div class="w-full max-w-xl mx-auto px-4 py-6 min-h-screen pb-20">
-  <TimeCapsule entries={myEntries} />
+  {#if $settings.timeCapsuleEnabled}
+    <TimeCapsule entries={myEntries} />
+  {/if}
   <header class="flex items-center justify-between mb-8 relative z-10">
     <a
       href="/"

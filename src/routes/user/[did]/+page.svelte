@@ -5,7 +5,12 @@
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import { Agent } from "@atproto/api";
-  import { ChevronLeft, Loader2, Edit3 } from "lucide-svelte";
+  import {
+    ChevronLeft,
+    Loader2,
+    Edit3,
+    Settings as SettingsIcon,
+  } from "lucide-svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { t } from "$lib/i18n";
 
@@ -114,11 +119,19 @@
       >
         <ChevronLeft size={24} />
       </a>
-      <h1 class="font-bold text-lg">
+      <h1 class="font-bold text-lg flex-1">
         {useProfile
           ? useProfile.displayName || useProfile.handle
           : $t("user.loading")}
       </h1>
+      {#if did === $session.did}
+        <a
+          href="/settings"
+          class="p-2 -mr-2 text-slate-400 hover:text-white transition-colors"
+        >
+          <SettingsIcon size={20} />
+        </a>
+      {/if}
     </div>
   </div>
 
