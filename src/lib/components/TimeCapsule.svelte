@@ -11,6 +11,7 @@
     left: number;
     moveDuration: number;
     scale: number;
+    driftX: number;
   }
 
   let visibleLines: FloatingLine[] = [];
@@ -43,49 +44,64 @@
     const text = textPool[Math.floor(Math.random() * textPool.length)];
     const id = nextId++;
 
-    // Position logic to avoid center
+    // Position logic ...
     let top, left;
     const zone = Math.floor(Math.random() * 4);
     if (zone === 0) {
       top = 5 + Math.random() * 15;
       left = 5 + Math.random() * 90;
-    } // Top
-    else if (zone === 1) {
+    } else if (zone === 1) {
       top = 80 + Math.random() * 15;
       left = 5 + Math.random() * 90;
-    } // Bottom
-    else if (zone === 2) {
+    } else if (zone === 2) {
       top = 5 + Math.random() * 90;
       left = 2 + Math.random() * 13;
-    } // Left
-    else {
+    } else {
       top = 5 + Math.random() * 90;
       left = 85 + Math.random() * 13;
-    } // Right
+    }
 
     const newLine: FloatingLine = {
       id,
       text,
       top,
       left,
-      moveDuration: 20 + Math.random() * 10,
-      scale: 0.8 + Math.random() * 0.4,
+      moveDuration: 25 + Math.random() * 10,
+      scale: 1.0 + Math.random() * 0.5,
+      driftX: (Math.random() - 0.5) * 100,
     };
 
     visibleLines = [...visibleLines, newLine];
 
-    // Lifecycle:
-    // Fade IN (4s) -> Stay -> Fade OUT (4s)
-    // We remove it after enough time passed.
     const activeTime = 5000 + Math.random() * 4000;
-
     setTimeout(() => {
       visibleLines = visibleLines.filter((l) => l.id !== id);
     }, activeTime);
   }
 
+  // Custom Action to handle movement reliably via JS
+  function animateMove(
+    node: HTMLElement,
+    { duration, x }: { duration: number; x: number },
+  ) {
+    // Force initial state
+    node.style.transform = "translate3d(0,0,0)";
+    node.style.transition = `transform ${duration}s linear`;
+
+    // Trigger layout reflow to ensure start position is locked
+    node.getBoundingClientRect();
+
+    // Start move
+    requestAnimationFrame(() => {
+      node.style.transform = `translate3d(${x}px, -50px, 0)`;
+    });
+
+    return {
+      update() {}, // no-op
+    };
+  }
+
   onMount(() => {
-    // Initial spawn
     spawnLine();
     setTimeout(() => spawnLine(), 1500);
 
@@ -108,14 +124,14 @@
     <div
       in:fade={{ duration: 4000 }}
       out:fade={{ duration: 4000 }}
-      class="absolute text-slate-400 font-handwriting whitespace-nowrap select-none"
+      use:animateMove={{ duration: line.moveDuration, x: line.driftX }}
+      class="absolute text-fuchsia-100/80 font-handwriting whitespace-nowrap select-none drop-shadow-[0_0_3px_rgba(255,255,255,0.5)]"
       style="
         top: {line.top}%; 
         left: {line.left}%; 
-        opacity: 0.6;
+        opacity: 0.9;
         font-size: {line.scale}rem;
         will-change: transform, opacity;
-        animation: slowFloat {line.moveDuration}s linear forwards;
       "
     >
       {line.text}
@@ -124,12 +140,5 @@
 </div>
 
 <style>
-  @keyframes slowFloat {
-    0% {
-      transform: translateY(0);
-    }
-    100% {
-      transform: translateY(-30px);
-    }
-  }
+  /* No keyframes needed */
 </style>

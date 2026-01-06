@@ -16,7 +16,7 @@
 }
 
 .glass-panel {
-  @apply bg-glass-100 backdrop-blur-lg border border-white/10 shadow-xl;
+  @apply bg-slate-900/10 backdrop-blur-sm border border-white/10 shadow-xl;
 }
 
 .glass-btn {
