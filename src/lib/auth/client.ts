@@ -14,7 +14,7 @@ export async function createClient() {
   const origin = isProd ? publicUrl : localUrl;
 
   const enc = encodeURIComponent;
-  const scope = "atproto repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post blob";
+  const scope = "atproto repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post blob:*/*";
   const redirectUri = `${origin}/`; // We use root as redirect
 
   let client_id = "";
