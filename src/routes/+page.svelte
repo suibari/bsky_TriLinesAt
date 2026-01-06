@@ -170,12 +170,42 @@
     try {
       if (!$session.agent) return;
 
-      // Get Follows
-      const f = await getFollows($session.did!);
-      follows = f.map((p) => p.did);
+      // Try to load follows from cache first for instant render
+      const cacheKey = `follows_${$session.did}`;
+      const cached = localStorage.getItem(cacheKey);
 
-      await fetchMorePosts();
-      updateFilteredEntries();
+      if (cached) {
+        try {
+          follows = JSON.parse(cached);
+        } catch (e) {
+          console.warn("Failed to parse follows cache", e);
+        }
+      }
+
+      // Fetch follows in parallel
+      const followsPromise = getFollows($session.did!).then((f) => {
+        const dids = f.map((p) => p.did);
+        follows = dids;
+        localStorage.setItem(cacheKey, JSON.stringify(dids));
+        // If we're on the following tab, update the view with fresh follows
+        if (activeTab === "following") {
+          updateFilteredEntries();
+        }
+      });
+
+      // Fetch posts in parallel
+      const postsPromise = fetchMorePosts().then(() => {
+        updateFilteredEntries();
+      });
+
+      // Wait strategy:
+      // If we are on "following" and have NO cache, we must wait for both.
+      // Otherwise (Global tab OR cached follows), we only need to wait for posts to show something.
+      if (activeTab === "following" && !cached) {
+        await Promise.all([followsPromise, postsPromise]);
+      } else {
+        await postsPromise;
+      }
     } catch (e) {
       console.error(e);
     } finally {

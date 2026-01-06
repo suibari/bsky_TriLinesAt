@@ -315,7 +315,7 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
     const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
 
     // Use concurrency limited processing
-    const entries = await limitConcurrency(rawLinks, 10, async (item: any) => {
+    const entries = await limitConcurrency(rawLinks, 30, async (item: any) => {
       try {
         // Normalize fields (Constellation varies between 'author'/'did' and 'uri'/'rkey')
         let did = item.author || item.did;
