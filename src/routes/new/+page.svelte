@@ -2,6 +2,7 @@
   import { createDiary } from "$lib/bsky";
   import { session } from "$lib/auth/session";
   import Button from "$lib/components/Button.svelte";
+  import TimeCapsule from "$lib/components/TimeCapsule.svelte";
   import {
     Image as ImageIcon,
     X,
@@ -37,6 +38,7 @@
   let currentStreak = 0;
   let totalCount = 0;
   let lastPostDate: string | undefined;
+  let myEntries: any[] | undefined = undefined;
 
   onMount(async () => {
     // Load settings from localStorage
@@ -55,8 +57,9 @@
     // Fetch current stats if authed
     if ($session.isAuthenticated && $session.did) {
       try {
-        const myEntries = await getEntries($session.did);
-        const { total, streak } = calculateRankings(myEntries);
+        const entriesData = await getEntries($session.did);
+        myEntries = entriesData;
+        const { total, streak } = calculateRankings(entriesData);
         const myTotal = total.find((r) => r.did === $session.did);
         const myStreak = streak.find((r) => r.did === $session.did);
 
@@ -169,7 +172,8 @@
 </script>
 
 <div class="w-full max-w-xl mx-auto px-4 py-6 min-h-screen pb-20">
-  <header class="flex items-center justify-between mb-8">
+  <TimeCapsule entries={myEntries} />
+  <header class="flex items-center justify-between mb-8 relative z-10">
     <a
       href="/"
       class="p-2 -ml-2 text-slate-400 hover:text-white transition-colors"
@@ -180,7 +184,7 @@
     <div class="w-8"></div>
   </header>
 
-  <div class="space-y-6">
+  <div class="space-y-6 relative z-10">
     {#each lines as line, i}
       <div
         class="glass-panel p-4 rounded-xl relative group focus-within:ring-2 ring-violet-500/50 transition-all"
