@@ -69,20 +69,14 @@
     try {
       // 1. Get Profile
       try {
-        const { data } = await $session.agent!.app.bsky.actor.getProfile({
-          actor: did!,
-        });
-        useProfile = data;
-      } catch (e) {
-        console.warn(
-          "Authenticated getProfile failed, trying public fallback",
-          e,
-        );
-        const publicAgent = new Agent("https://api.bsky.app");
+        const publicAgent = new Agent("https://public.api.bsky.app");
         const { data } = await publicAgent.app.bsky.actor.getProfile({
           actor: did!,
         });
         useProfile = data;
+      } catch (e) {
+        console.warn("Failed to fetch profile", e);
+        useProfile = null;
       }
 
       // 2. Get Entries

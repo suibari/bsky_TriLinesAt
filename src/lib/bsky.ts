@@ -482,9 +482,8 @@ export async function getAllEntriesForRanking() {
 
 // Helper to get profiles (ensures agent is available)
 export async function getProfiles(actors: string[]) {
-  const { session } = await import("$lib/auth/session");
-  const s = get(session);
-  if (!s.agent) throw new Error("Not authenticated");
+  // Use public agent to avoid 403 with minimal permissions
+  const agent = new Agent('https://public.api.bsky.app');
 
   const chunks = [];
   for (let i = 0; i < actors.length; i += 25) {
@@ -493,7 +492,7 @@ export async function getProfiles(actors: string[]) {
 
   const results = await Promise.all(chunks.map(async (chunk) => {
     try {
-      const { data } = await s.agent!.app.bsky.actor.getProfiles({
+      const { data } = await agent.app.bsky.actor.getProfiles({
         actors: chunk,
       });
       return data.profiles;

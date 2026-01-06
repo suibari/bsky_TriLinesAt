@@ -40,20 +40,14 @@
 
       // 1. Get Profile
       try {
-        const { data: profile } = await agent.app.bsky.actor.getProfile({
-          actor: did!,
-        });
-        author = profile;
-      } catch (e) {
-        console.warn(
-          "Authenticated getProfile failed, trying public fallback",
-          e,
-        );
-        const publicAgent = new Agent("https://api.bsky.app");
+        const publicAgent = new Agent("https://public.api.bsky.app");
         const { data: profile } = await publicAgent.app.bsky.actor.getProfile({
           actor: did!,
         });
         author = profile;
+      } catch (e) {
+        console.warn("Failed to fetch profile", e);
+        author = null;
       }
 
       // 2. Get PDS and create agent

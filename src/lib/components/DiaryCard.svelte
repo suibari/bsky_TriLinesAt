@@ -8,6 +8,7 @@
   import { goto } from "$app/navigation";
   import { Heart, ExternalLink, Trash2, X } from "lucide-svelte";
   import { t } from "$lib/i18n";
+  import { Agent } from "@atproto/api";
 
   const dispatch = createEventDispatcher();
 
@@ -90,9 +91,10 @@
       const uniqueDids = Array.from(
         new Set(links.map((l: any) => l.author || l.did).filter(Boolean)),
       ).slice(0, 5) as string[];
-      if (uniqueDids.length > 0 && $session.agent) {
+      if (uniqueDids.length > 0) {
         try {
-          const { data } = await $session.agent.app.bsky.actor.getProfiles({
+          const publicAgent = new Agent("https://public.api.bsky.app");
+          const { data } = await publicAgent.app.bsky.actor.getProfiles({
             actors: uniqueDids,
           });
           likeAvatars = data.profiles;
@@ -140,10 +142,11 @@
         likes++;
 
         // Try to add self to avatars optimistically
-        if ($session.did && $session.agent) {
+        if ($session.did) {
           try {
+            const publicAgent = new Agent("https://public.api.bsky.app");
             const { data: profile } =
-              await $session.agent.app.bsky.actor.getProfile({
+              await publicAgent.app.bsky.actor.getProfile({
                 actor: $session.did,
               });
             if (!likeAvatars.find((p) => p.did === $session.did)) {

@@ -95,23 +95,15 @@
   });
 
   async function loadSelfProfile() {
-    if (!$session.did || !$session.agent) return;
+    if (!$session.did) return;
     try {
-      const { data } = await $session.agent.app.bsky.actor.getProfile({
+      const publicAgent = new Agent("https://public.api.bsky.app");
+      const { data } = await publicAgent.app.bsky.actor.getProfile({
         actor: $session.did,
       });
       profiles[$session.did] = data;
     } catch (e) {
-      console.warn("Self profile fetch failed, trying public fallback", e);
-      try {
-        const publicAgent = new Agent("https://api.bsky.app");
-        const { data } = await publicAgent.app.bsky.actor.getProfile({
-          actor: $session.did,
-        });
-        profiles[$session.did] = data;
-      } catch (e2) {
-        console.warn("Public fallback also failed", e2);
-      }
+      console.warn("Self profile fetch failed", e);
     }
   }
 

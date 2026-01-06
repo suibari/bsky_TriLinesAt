@@ -15,7 +15,7 @@
   "response_types": [
     "code"
   ],
-  "scope": "atproto transition:generic",
+  "scope": "atproto repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post blob",
   "token_endpoint_auth_method": "none",
   "dpop_bound_access_tokens": true
 }
