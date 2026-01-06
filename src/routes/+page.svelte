@@ -25,6 +25,8 @@
 
   let rankingData: Rankings = { total: [], streak: [] };
   let rankingMode: "total" | "streak" = "total";
+  let rankingLoading = false;
+  let rankingFetched = false;
 
   function handleEntryUpdate(e: CustomEvent) {
     const { uri, isLiked, likeCount, viewerLike } = e.detail;
@@ -164,7 +166,6 @@
     updateFilteredEntries();
   }
 
-  // Initial Load (Consolidated)
   async function initialLoad() {
     loading = true;
     try {
@@ -198,6 +199,9 @@
         updateFilteredEntries();
       });
 
+      // Fetch Ranking in background (fire and forget for main thread, but track state)
+      fetchRankingData();
+
       // Wait strategy:
       // If we are on "following" and have NO cache, we must wait for both.
       // Otherwise (Global tab OR cached follows), we only need to wait for posts to show something.
@@ -213,13 +217,11 @@
     }
   }
 
-  async function loadRanking() {
-    if (!$session.agent) return;
-    loading = true;
-    entries = []; // Clear entries when in ranking mode
+  async function fetchRankingData() {
+    if (rankingFetched || rankingLoading) return;
+    rankingLoading = true;
 
     try {
-      activeTab = "ranking";
       // Need import specifically if separate function, assuming imported or available
       // Using the one defined in bsky.ts
       const { getAllEntriesForRanking } = await import("$lib/bsky");
@@ -248,10 +250,18 @@
           }
         }
       }
+      rankingFetched = true;
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load ranking", e);
     } finally {
-      loading = false;
+      rankingLoading = false;
+    }
+  }
+
+  function switchToRanking() {
+    activeTab = "ranking";
+    if (!rankingFetched && !rankingLoading) {
+      fetchRankingData();
     }
   }
 
@@ -334,7 +344,7 @@
     // Prevent swipe during loading or on landing page (if not authenticated)
     if (
       loading ||
-      (activeTab === "ranking" && loading) ||
+      (activeTab === "ranking" && (loading || rankingLoading)) ||
       !$session.isAuthenticated
     ) {
       translateX = 0;
@@ -359,7 +369,7 @@
           animateTabSwitch("left", () => switchToGlobal());
           return;
         } else if (activeTab === "global") {
-          animateTabSwitch("left", () => loadRanking());
+          animateTabSwitch("left", () => switchToRanking());
           return;
         }
       }
@@ -538,7 +548,7 @@
           'ranking'
             ? 'bg-white/10 text-white shadow-sm'
             : 'text-slate-400 hover:text-white'}"
-          on:click={loadRanking}
+          on:click={switchToRanking}
         >
           <Trophy size={16} />
           <span class="whitespace-nowrap">{$t("feed.ranking")}</span>
@@ -562,131 +572,157 @@
               </div>
             </div>
           </div>
-        {:else if activeTab === "ranking"}
+        {:else}
+          <!-- Feed View (Following / Global) -->
+          <div class="space-y-6 {activeTab === 'ranking' ? 'hidden' : ''}">
+            {#if entries.length === 0}
+              <div class="text-center py-12 text-slate-500">
+                <p>{$t("feed.no_entries")}</p>
+                <p class="text-sm mt-2">
+                  {$t("feed.no_entries_hint")}
+                </p>
+              </div>
+            {:else}
+              {#each entries as entry, i (entry.uri)}
+                {@const currentDate = getDateHeader(entry.createdAt)}
+                {@const prevDate =
+                  i > 0 ? getDateHeader(entries[i - 1].createdAt) : null}
+                {@const isToday =
+                  currentDate === getDateHeader(new Date().toISOString())}
+
+                {#if (i === 0 || currentDate !== prevDate) && !isToday}
+                  <div class="flex items-center gap-4 py-4 opacity-70">
+                    <div
+                      class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
+                    ></div>
+                    <span
+                      class="text-xs font-mono font-bold text-fuchsia-300 tracking-widest"
+                      >{currentDate}</span
+                    >
+                    <div
+                      class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
+                    ></div>
+                  </div>
+                {/if}
+
+                <DiaryCard
+                  {entry}
+                  author={profiles[entry.authorDid]}
+                  on:update={handleEntryUpdate}
+                  on:delete={(e) => {
+                    entries = entries.filter(
+                      (item) => item.uri !== e.detail.uri,
+                    );
+                    allPosts = allPosts.filter(
+                      (item) => item.uri !== e.detail.uri,
+                    );
+                  }}
+                />
+              {/each}
+
+              <!-- Infinite Scroll Sentinel -->
+              {#if (activeTab === "following" || activeTab === "global") && !loading}
+                <div bind:this={sentinel} class="h-4 w-full"></div>
+                {#if loadingMore}
+                  <div class="flex justify-center py-4">
+                    <div
+                      class="w-6 h-6 rounded-full border-t-2 border-fuchsia-500 animate-spin"
+                    ></div>
+                  </div>
+                {/if}
+              {/if}
+            {/if}
+          </div>
+
           <!-- Ranking View -->
-          <div class="space-y-6">
-            <div class="flex justify-center gap-4">
-              <button
-                class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
-                'total'
-                  ? 'bg-fuchsia-500 text-white shadow-lg'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
-                on:click={() => (rankingMode = "total")}
-              >
-                {$t("ranking.total")}
-              </button>
-              <button
-                class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
-                'streak'
-                  ? 'bg-fuchsia-500 text-white shadow-lg'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
-                on:click={() => (rankingMode = "streak")}
-              >
-                {$t("ranking.streak")}
-              </button>
-            </div>
-
-            {#each (rankingMode === "total" ? rankingData.total : rankingData.streak).slice(0, 50) as item}
-              <div class="glass-panel p-4 flex items-center gap-4">
-                <div
-                  class="w-8 text-center font-black text-xl italic {item.rank <=
-                  3
-                    ? 'text-yellow-400'
-                    : 'text-slate-600'}"
-                >
-                  #{item.rank}
-                </div>
-
-                <a
-                  href="/user/{item.did}"
-                  class="flex items-center gap-3 flex-1 min-w-0"
-                >
-                  {#if profiles[item.did]}
-                    <Avatar src={profiles[item.did].avatar} size="md" />
-                    <div class="min-w-0">
-                      <div class="font-bold truncate">
-                        {profiles[item.did].displayName ||
-                          profiles[item.did].handle}
-                      </div>
-                      <div class="text-xs text-slate-400 truncate">
-                        @{profiles[item.did].handle}
-                      </div>
-                    </div>
-                  {:else}
-                    <div class="w-10 h-10 rounded-full bg-slate-700"></div>
-                    <div class="min-w-0">
-                      <div class="font-bold truncate text-slate-500">
-                        Loading...
-                      </div>
-                    </div>
-                  {/if}
-                </a>
-
-                <div class="text-right">
-                  <div class="text-2xl font-black text-white">{item.count}</div>
-                  <div
-                    class="text-[10px] text-slate-400 uppercase tracking-widest"
-                  >
-                    {rankingMode === "total"
-                      ? $t("ranking.days")
-                      : $t("ranking.days")}
+          <div class="space-y-6 {activeTab !== 'ranking' ? 'hidden' : ''}">
+            {#if rankingLoading && !rankingFetched}
+              <div class="glass-panel p-6 animate-pulse space-y-4">
+                <div class="flex gap-4">
+                  <div class="w-12 h-12 rounded-full bg-white/5"></div>
+                  <div class="flex-1 py-1 space-y-2">
+                    <div class="h-4 bg-white/5 rounded w-1/3"></div>
+                    <div class="h-3 bg-white/5 rounded w-1/4"></div>
                   </div>
                 </div>
+                <div class="text-center text-sm text-slate-400">
+                  Loading Ranking...
+                </div>
               </div>
-            {/each}
-          </div>
-        {:else if entries.length === 0}
-          <div class="text-center py-12 text-slate-500">
-            <p>{$t("feed.no_entries")}</p>
-            <p class="text-sm mt-2">
-              {$t("feed.no_entries_hint")}
-            </p>
-          </div>
-        {:else}
-          {#each entries as entry, i (entry.uri)}
-            {@const currentDate = getDateHeader(entry.createdAt)}
-            {@const prevDate =
-              i > 0 ? getDateHeader(entries[i - 1].createdAt) : null}
-            {@const isToday =
-              currentDate === getDateHeader(new Date().toISOString())}
-
-            {#if (i === 0 || currentDate !== prevDate) && !isToday}
-              <div class="flex items-center gap-4 py-4 opacity-70">
-                <div
-                  class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
-                ></div>
-                <span
-                  class="text-xs font-mono font-bold text-fuchsia-300 tracking-widest"
-                  >{currentDate}</span
+            {:else}
+              <div class="flex justify-center gap-4">
+                <button
+                  class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
+                  'total'
+                    ? 'bg-fuchsia-500 text-white shadow-lg'
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
+                  on:click={() => (rankingMode = "total")}
                 >
-                <div
-                  class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent flex-1"
-                ></div>
+                  {$t("ranking.total")}
+                </button>
+                <button
+                  class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
+                  'streak'
+                    ? 'bg-fuchsia-500 text-white shadow-lg'
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
+                  on:click={() => (rankingMode = "streak")}
+                >
+                  {$t("ranking.streak")}
+                </button>
               </div>
-            {/if}
 
-            <DiaryCard
-              {entry}
-              author={profiles[entry.authorDid]}
-              on:update={handleEntryUpdate}
-              on:delete={(e) => {
-                entries = entries.filter((item) => item.uri !== e.detail.uri);
-                allPosts = allPosts.filter((item) => item.uri !== e.detail.uri);
-              }}
-            />
-          {/each}
+              {#each (rankingMode === "total" ? rankingData.total : rankingData.streak).slice(0, 50) as item}
+                <div class="glass-panel p-4 flex items-center gap-4">
+                  <div
+                    class="w-8 text-center font-black text-xl italic {item.rank <=
+                    3
+                      ? 'text-yellow-400'
+                      : 'text-slate-600'}"
+                  >
+                    #{item.rank}
+                  </div>
 
-          <!-- Infinite Scroll Sentinel -->
-          {#if (activeTab === "following" || activeTab === "global") && !loading}
-            <div bind:this={sentinel} class="h-4 w-full"></div>
-            {#if loadingMore}
-              <div class="flex justify-center py-4">
-                <div
-                  class="w-6 h-6 rounded-full border-t-2 border-fuchsia-500 animate-spin"
-                ></div>
-              </div>
+                  <a
+                    href="/user/{item.did}"
+                    class="flex items-center gap-3 flex-1 min-w-0"
+                  >
+                    {#if profiles[item.did]}
+                      <Avatar src={profiles[item.did].avatar} size="md" />
+                      <div class="min-w-0">
+                        <div class="font-bold truncate">
+                          {profiles[item.did].displayName ||
+                            profiles[item.did].handle}
+                        </div>
+                        <div class="text-xs text-slate-400 truncate">
+                          @{profiles[item.did].handle}
+                        </div>
+                      </div>
+                    {:else}
+                      <div class="w-10 h-10 rounded-full bg-slate-700"></div>
+                      <div class="min-w-0">
+                        <div class="font-bold truncate text-slate-500">
+                          Loading...
+                        </div>
+                      </div>
+                    {/if}
+                  </a>
+
+                  <div class="text-right">
+                    <div class="text-2xl font-black text-white">
+                      {item.count}
+                    </div>
+                    <div
+                      class="text-[10px] text-slate-400 uppercase tracking-widest"
+                    >
+                      {rankingMode === "total"
+                        ? $t("ranking.days")
+                        : $t("ranking.days")}
+                    </div>
+                  </div>
+                </div>
+              {/each}
             {/if}
-          {/if}
+          </div>
         {/if}
       </div>
     </div>
