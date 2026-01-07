@@ -64,6 +64,12 @@ export const translations = {
     "settings.title": "Settings",
     "settings.timecapsule": "Time Capsule (Show past entries)",
     "settings.timecapsule_desc": "Display random lines from your past diary entries in the background of the editor.",
+    "settings.danger_zone": "Danger Zone",
+    "settings.delete_all": "Delete All Data",
+    "settings.delete_all_desc": "Permanently delete all your diary entries and likes from the PDS. This action cannot be undone.",
+    "settings.delete_confirm": "Are you sure you want to delete ALL your diary data? This action is irreversible.",
+    "settings.deleting": "Deleting...",
+    "settings.deleted": "All data has been deleted.",
   },
   ja: {
     "app.title": "TriLinesAt",
@@ -126,6 +132,12 @@ export const translations = {
     "settings.title": "設定",
     "settings.timecapsule": "タイムカプセル機能",
     "settings.timecapsule_desc": "日記作成画面の背景に、過去の日記をランダムに表示します。",
+    "settings.danger_zone": "日記データ削除",
+    "settings.delete_all": "すべてのデータを削除",
+    "settings.delete_all_desc": "PDSからすべての日記といいねを完全に削除します。この操作は取り消せません。",
+    "settings.delete_confirm": "本当にすべての日記データを削除しますか？この操作は元に戻せません。",
+    "settings.deleting": "削除中...",
+    "settings.deleted": "すべてのデータを削除しました。",
   }
 };
 

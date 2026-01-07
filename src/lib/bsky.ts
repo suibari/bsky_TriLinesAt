@@ -593,3 +593,38 @@ export async function getEntryLikes(uri: string) {
 export function getBlobUrl(did: string, blob: BlobRef): string {
   return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${blob.ref.toString()}@jpeg`;
 }
+
+export async function deleteAllData(did: string) {
+  const agent = getAgent();
+  const collections = [IDS.TriLinesEntry, IDS.TriLinesLike];
+
+  for (const collection of collections) {
+    let cursor: string | undefined;
+    let records: { uri: string; rkey: string }[] = [];
+
+    // 1. List all records
+    do {
+      const { data } = await agent.api.com.atproto.repo.listRecords({
+        repo: did,
+        collection: collection,
+        limit: 100,
+        cursor: cursor
+      });
+      records = [
+        ...records,
+        ...data.records.map(r => ({ uri: r.uri, rkey: r.uri.split('/').pop()! }))
+      ];
+      cursor = data.cursor;
+    } while (cursor);
+
+    // 2. Delete all records
+    // Using limitConcurrency to handle deletions in parallel batches
+    await limitConcurrency(records, 10, async (record) => {
+      await agent.api.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: collection,
+        rkey: record.rkey
+      });
+    });
+  }
+}
