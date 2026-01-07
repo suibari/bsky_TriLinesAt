@@ -11,8 +11,9 @@
     Loader2,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
-  import { t } from "$lib/i18n";
+  import { t, locale } from "$lib/i18n"; // Import locale
   import { settings } from "$lib/stores/settings";
+  import { getRandomPlaceholders } from "$lib/constants/placeholders";
 
   import { onMount } from "svelte";
 
@@ -29,6 +30,11 @@
     { text: "", image: undefined as Blob | undefined, preview: "" },
     { text: "", image: undefined as Blob | undefined, preview: "" },
   ];
+
+  let placeholders: string[] = ["", "", ""];
+
+  // Reactively update placeholders when locale changes or on mount
+  $: placeholders = getRandomPlaceholders(3, $locale);
 
   let shareToBluesky = false; // Default OFF (safer side)
   let rememberSettings = false;
@@ -203,7 +209,7 @@
           id="line-{i}"
           bind:value={line.text}
           maxlength={MAX_CHARS}
-          placeholder={$t("editor.placeholder")}
+          placeholder={placeholders[i] || $t("editor.placeholder")}
           class="w-full bg-transparent border-none focus:ring-0 text-lg placeholder-slate-600 resize-none h-16 text-white caret-fuchsia-500 px-1"
         ></textarea>
 
