@@ -25,40 +25,35 @@ export async function initSession() {
       const { session: oauthSession } = result;
       // Provide the fetch handler from the client if possible, or rely on the session data
       // Since OAuthSession might not be exactly AtpSessionData, we might strictly only need the DID and headers
-      let serviceUrl = 'https://bsky.social'; // Default fallback
+      // Manually hydrate the agent session immediately to get the token and PDS URL
+      let accessToken = undefined;
+      let refreshToken = undefined;
+      let serviceUrl = undefined; // Initialize to undefined
 
       try {
-        // Resolve PDS from DID
-        const handle = (oauthSession as any).handle;
+        // getTokenSet is protected but available at runtime. 
+        const tokenSet = await (oauthSession as any).getTokenSet();
+        if (tokenSet) {
+          accessToken = tokenSet.access_token;
+          refreshToken = tokenSet.refresh_token;
 
-        if (handle) {
-          const publicAgent = new Agent('https://public.api.bsky.app');
-          const { data } = await publicAgent.resolveHandle({ handle });
-          if (data.did) {
-            // Try to describe repo via AppView to confirm PDS? 
-            // Or just assume bsky.social if on public.api?
-          }
-        }
-
-        const did = oauthSession.did;
-        if (did.startsWith('did:plc:')) {
-          const res = await fetch(`https://plc.directory/${did}`);
-          const doc = await res.json();
-          const service = doc.service?.find((s: any) => s.id === '#atproto_pds');
-          if (service && service.serviceEndpoint) {
-            serviceUrl = service.serviceEndpoint;
-          }
-        } else if (did.startsWith('did:web:')) {
-          const domain = did.replace('did:web:', '');
-          const res = await fetch(`https://${domain}/.well-known/did.json`);
-          const doc = await res.json();
-          const service = doc.service?.find((s: any) => s.id === '#atproto_pds');
-          if (service && service.serviceEndpoint) {
-            serviceUrl = service.serviceEndpoint;
+          // Optimization: Extract PDS (aud) from access token
+          // This avoids the network call to PLC directory and ensures we use the exact PDS the token is for.
+          if ((tokenSet as any).aud) {
+            serviceUrl = (tokenSet as any).aud;
+            // console.log('Using PDS from tokenSet.aud:', serviceUrl);
           }
         }
       } catch (e) {
-        console.warn("Failed to resolve PDS, defaulting to bsky.social", e);
+        // Silent catch or minimal warn if needed
+      }
+
+      // Final Check: If we didn't get serviceUrl from token, we cannot proceed safely.
+      // Defaulting to bsky.social is dangerous for other PDS users (auth errors).
+      if (!serviceUrl) {
+        console.error("Failed to resolve PDS from token 'aud'. Aborting session.");
+        await signOut();
+        return;
       }
 
       // Construct Agent with explicit service URL & OAuth fetch handler
@@ -69,23 +64,6 @@ export async function initSession() {
           return (oauthSession as any).fetchHandler(url, init);
         }
       });
-
-      // Manually hydrate the agent session
-      let accessToken = undefined;
-      let refreshToken = undefined;
-
-      try {
-        // getTokenSet is protected but available at runtime. 
-        // We need the token string for the Agent to work in standard ways (like createRecord which uses xrpc)
-        // Agent uses `this.session.accessJwt` to set `Authorization: Bearer ...` header.
-        const tokenSet = await (oauthSession as any).getTokenSet();
-        if (tokenSet) {
-          accessToken = tokenSet.access_token;
-          refreshToken = tokenSet.refresh_token;
-        }
-      } catch (e) {
-        // Silent catch or minimal warn if needed
-      }
 
       // @ts-ignore
       agent.session = {
