@@ -124,7 +124,7 @@ export const PLACEHOLDER_GENRES = [
         en: "What did you share with someone today, saying 'It's delicious' or 'It's funny'?",
       },
       {
-        ja: "嫌なことがあっても、感情をグッと抑えられた自分はどう？",
+        ja: "嫌なことがあっても、感情をグッと抑えられたことがあった？",
         en: "How about yourself who managed to suppress emotions even if something bad happened?",
       },
       {
