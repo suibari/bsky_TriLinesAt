@@ -59,6 +59,23 @@
         shareToBluesky =
           localStorage.getItem("settings.shareToBluesky") === "true";
       }
+
+      // Load draft
+      try {
+        const savedDraft = localStorage.getItem("diary_draft");
+        if (savedDraft) {
+          const parsed = JSON.parse(savedDraft);
+          if (Array.isArray(parsed) && parsed.length === 3) {
+            lines = parsed.map((l: any, i) => ({
+              ...lines[i], // keep defaults/structure
+              text: l.text || "",
+              // Images are not persisted in localStorage due to size/complexity
+            }));
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load draft", e);
+      }
     }
     isLoaded = true;
 
@@ -80,7 +97,7 @@
     }
   });
 
-  // Save settings when changed
+  // Save settings and DRAFT when changed
   $: if (isLoaded && typeof localStorage !== "undefined") {
     localStorage.setItem("settings.rememberShare", String(rememberSettings));
     if (rememberSettings) {
@@ -88,6 +105,11 @@
     } else {
       localStorage.removeItem("settings.shareToBluesky");
     }
+
+    // Save Draft (Debouncing logic is natural via Svelte reactive block, but strictly it saves on every keystroke.
+    // For text this is fine. browser handles it well.)
+    const draftData = lines.map((l) => ({ text: l.text }));
+    localStorage.setItem("diary_draft", JSON.stringify(draftData));
   }
 
   const MAX_CHARS = 50;
@@ -128,6 +150,11 @@
         lines.map((l) => ({ text: l.text, image: l.image })),
         shareToBluesky,
       );
+
+      // Clear draft on success
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem("diary_draft");
+      }
 
       // Calculate post-success stats (Optimistic)
       let newStreak = currentStreak;
@@ -173,6 +200,7 @@
     } catch (e) {
       console.error(e);
       alert("Failed to post diary.");
+      // Do NOT clear draft here so user can retry
     } finally {
       submitting = false;
     }
