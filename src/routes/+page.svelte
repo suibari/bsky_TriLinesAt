@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { session, initSession, signIn, signOut } from "$lib/auth/session";
+  import { session, initSession, signIn } from "$lib/auth/session";
   import { getFollows, getGlobalFeed, getProfiles } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
-  import { Edit3, Compass, Users, LogOut, Trophy } from "lucide-svelte";
+  import { Edit3, Compass, Users, Trophy } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import Avatar from "$lib/components/Avatar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
@@ -485,13 +485,7 @@
               EN
             </button>
           </div>
-          <button
-            class="text-slate-400 hover:text-white transition-colors"
-            on:click={signOut}
-            title={$t("auth.signout")}
-          >
-            <LogOut size={20} />
-          </button>
+
           <a href="/user/{$session.did}">
             {#if profiles[$session.did || ""]}
               <Avatar src={profiles[$session.did!].avatar} size="sm" />

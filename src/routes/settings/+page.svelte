@@ -1,9 +1,9 @@
 <script lang="ts">
   import { t } from "$lib/i18n";
   import { settings } from "$lib/stores/settings";
-  import { ChevronLeft } from "lucide-svelte";
+  import { ChevronLeft, LogOut } from "lucide-svelte";
   import { onMount } from "svelte";
-  import { session } from "$lib/auth/session";
+  import { session, signOut } from "$lib/auth/session";
   import { goto } from "$app/navigation";
 
   // Redirect if not authed
@@ -61,5 +61,14 @@
         </button>
       </div>
     </div>
+
+    <!-- Sign Out -->
+    <button
+      class="w-full glass-panel rounded-xl p-4 flex items-center justify-center gap-2 text-red-400 hover:bg-red-500/10 transition-colors"
+      on:click={signOut}
+    >
+      <LogOut size={20} />
+      <span>{$t("auth.signout")}</span>
+    </button>
   </div>
 </div>
