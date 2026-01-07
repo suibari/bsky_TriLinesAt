@@ -249,7 +249,8 @@ export function getRandomPlaceholders(count: number, locale: string = 'ja'): str
     const questionObj =
       genre.questions[Math.floor(Math.random() * genre.questions.length)];
 
-    results.push(questionObj[lang]);
+    const prefix = lang === 'en' ? "Example: " : "例：";
+    results.push(prefix + questionObj[lang]);
 
     // Remove the used genre to ensure diversity
     genres.splice(genreIndex, 1);
