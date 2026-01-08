@@ -4,7 +4,7 @@
   import { getFollows, getGlobalFeed, getProfiles } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
-  import { Edit3, Compass, Users, Trophy } from "lucide-svelte";
+  import { Edit3, Compass, Users, Trophy, Loader2 } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import Avatar from "$lib/components/Avatar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
@@ -22,6 +22,7 @@
   let cursor: string | undefined = undefined;
   let profiles: Record<string, any> = {};
   let follows: string[] = []; // Changed to string[] for easier filtering
+  let isSigningIn = false; // Loading state for sign-in redirect
 
   let rankingData: Rankings = { total: [], streak: [] };
   let rankingMode: "total" | "streak" = "total";
@@ -258,9 +259,15 @@
   }
 
   function handleSignIn() {
-    const handle = prompt($t("auth.handle_prompt"));
+    // Try to load last handle
+    const storedHandle = localStorage.getItem("lastHandle") || "";
+    const handle = prompt($t("auth.handle_prompt"), storedHandle);
     if (handle) {
-      signIn(handle);
+      localStorage.setItem("lastHandle", handle);
+      isSigningIn = true;
+      signIn(handle).catch(() => {
+        isSigningIn = false;
+      });
     }
   }
 
@@ -384,7 +391,16 @@
   {#if $session.loading}
     <!-- Optional: Loading Spinner or just blank -->
     <div class="flex items-center justify-center min-h-screen">
-      <!-- <div class="w-8 h-8 rounded-full border-t-2 border-fuchsia-500 animate-spin"></div> -->
+      <Loader2 class="animate-spin text-fuchsia-500" size={32} />
+    </div>
+  {:else if isSigningIn}
+    <!-- Sign In Loading Overlay -->
+    <div
+      class="flex flex-col items-center justify-center min-h-screen space-y-4"
+      in:fade
+    >
+      <Loader2 class="animate-spin text-fuchsia-500" size={40} />
+      <p class="text-slate-400 animate-pulse">Redirecting...</p>
     </div>
   {:else if !$session.isAuthenticated}
     <!-- Landing Page -->
@@ -611,9 +627,7 @@
                 <div bind:this={sentinel} class="h-4 w-full"></div>
                 {#if loadingMore}
                   <div class="flex justify-center py-4">
-                    <div
-                      class="w-6 h-6 rounded-full border-t-2 border-fuchsia-500 animate-spin"
-                    ></div>
+                    <Loader2 class="animate-spin text-fuchsia-500" size={24} />
                   </div>
                 {/if}
               {/if}
