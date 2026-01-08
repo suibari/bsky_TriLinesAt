@@ -286,7 +286,11 @@
               }}
             >
               <img
-                src={getBlobUrl(author?.did || entry.authorDid, line.image!)}
+                src={getBlobUrl(
+                  author?.did || entry.authorDid,
+                  line.image!,
+                  "thumbnail",
+                )}
                 alt="Entry attachment"
                 class="w-full h-auto max-h-64 object-cover transform hover:scale-105 transition-transform duration-500"
                 loading="lazy"

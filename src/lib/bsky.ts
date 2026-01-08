@@ -590,8 +590,8 @@ export async function getEntryLikes(uri: string) {
   return data.linking_records || (data as any).links || [];
 }
 
-export function getBlobUrl(did: string, blob: BlobRef): string {
-  return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${blob.ref.toString()}@jpeg`;
+export function getBlobUrl(did: string, blob: BlobRef, type: 'fullsize' | 'thumbnail' = 'fullsize'): string {
+  return `https://cdn.bsky.app/img/feed_${type}/plain/${did}/${blob.ref.toString()}@jpeg`;
 }
 
 export async function deleteAllData(did: string) {
