@@ -1,6 +1,7 @@
 <script>
 	import "../app.css";
 	import { onMount } from "svelte";
+	import { dev } from "$app/environment";
 	import Lightbox from "$lib/components/Lightbox.svelte";
 	import Footer from "$lib/components/Footer.svelte";
 	import AboutModal from "$lib/components/AboutModal.svelte";
@@ -26,9 +27,10 @@
 
 <svelte:head>
 	<!-- PWA Manifest Link -->
-	<link rel="manifest" href="/manifest.webmanifest" />
+	{#if !dev}
+		<link rel="manifest" href="/manifest.webmanifest" />
+	{/if}
 	<meta name="theme-color" content="#0f172a" />
-
 </svelte:head>
 
 <Lightbox />
