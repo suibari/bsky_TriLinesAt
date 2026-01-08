@@ -185,7 +185,17 @@
           >
         </div>
 
-        {#if entries.length === 0}
+        {#if loading}
+          <div class="glass-panel p-6 animate-pulse space-y-4">
+            <div class="flex gap-4">
+              <div class="w-12 h-12 rounded-full bg-white/5"></div>
+              <div class="flex-1 py-1 space-y-2">
+                <div class="h-4 bg-white/5 rounded w-1/3"></div>
+                <div class="h-3 bg-white/5 rounded w-1/4"></div>
+              </div>
+            </div>
+          </div>
+        {:else if entries.length === 0}
           <p class="text-center text-slate-500 py-8">
             {$t("feed.no_entries")}
           </p>
