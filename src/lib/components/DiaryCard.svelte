@@ -9,6 +9,7 @@
   import { Heart, ExternalLink, Trash2, X } from "lucide-svelte";
   import { t } from "$lib/i18n";
   import { Agent } from "@atproto/api";
+  import { userBadges } from "$lib/stores/badges";
 
   const dispatch = createEventDispatcher();
 
@@ -230,6 +231,7 @@
           src={author.avatar}
           alt={author.displayName || author.handle}
           size="md"
+          badge={$userBadges[author.did]}
         />
       </a>
       <div class="min-w-0 flex-1">

@@ -18,6 +18,7 @@
   import { calculateRankings, type Rankings } from "$lib/ranking";
   import { isAboutOpen } from "$lib/stores/ui";
   import type { TriLinesEntryView } from "$lib/types";
+  import { userBadges } from "$lib/stores/badges";
 
   // State
   // State
@@ -36,6 +37,7 @@
     rookie: [],
     weekly: [],
     monthly: [],
+    badges: {},
   };
   let rankingMode: "total" | "streak" | "rookie" | "weekly" | "monthly" =
     "rookie"; // Default to rookie or whatever reasonable
@@ -277,6 +279,7 @@
 
       // Calculate
       rankingData = calculateRankings(posts);
+      userBadges.set(rankingData.badges);
 
       // Fetch profiles for all ranked users
       const topDids = new Set([
@@ -752,7 +755,11 @@
                     class="flex items-center gap-3 flex-1 min-w-0"
                   >
                     {#if profiles[item.did]}
-                      <Avatar src={profiles[item.did].avatar} size="md" />
+                      <Avatar
+                        src={profiles[item.did].avatar}
+                        size="md"
+                        badge={$userBadges[item.did]}
+                      />
                       <div class="min-w-0">
                         <div class="font-bold truncate">
                           {profiles[item.did].displayName ||

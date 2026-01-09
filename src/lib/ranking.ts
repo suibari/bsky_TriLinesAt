@@ -13,6 +13,7 @@ export interface Rankings {
   rookie: RankingItem[];
   weekly: RankingItem[];
   monthly: RankingItem[];
+  badges: Record<string, string>;
 }
 
 // Helper to format date as YYYY-MM-DD in local time
@@ -35,11 +36,16 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
   const users: Record<string, TriLinesEntry[]> = {};
   const now = new Date();
 
+  // Normalize Today/Yesterday strings
+  const todayStr = getDid(now.toISOString());
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getDid(yesterday.toISOString());
+
   // 1. Weekly Start (Monday of current week)
   // getDay(): 0 = Sun, 1 = Mon ... 6 = Sat
   const day = now.getDay();
   const diffToMon = now.getDate() - day + (day === 0 ? -6 : 1);
-  // Note: this modifies 'now' if we aren't careful, but we use new Date just before setDate
   const startOfWeek = new Date(now);
   startOfWeek.setDate(diffToMon);
   startOfWeek.setHours(0, 0, 0, 0);
@@ -65,12 +71,12 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
   const rookieRanking: RankingItem[] = [];
   const weeklyRanking: RankingItem[] = [];
   const monthlyRanking: RankingItem[] = [];
+  const badges: Record<string, string> = {};
 
   for (const did in users) {
     const userEntries = users[did];
 
     // Sort ascending for logic checks (oldest first)
-    // entries might come sorted or not, let's sort purely by time for safety
     userEntries.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const firstPostDate = new Date(userEntries[0].createdAt);
@@ -89,39 +95,60 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
       lastPostDate
     });
 
-    // Streak
-    if (uniqueDates.length === 0) {
-      streakRanking.push({ rank: 0, did, count: 0 });
-    } else {
-      let maxStreak = 0;
-      let currentStreak = 0;
-      let prevDateStr: string | null = null;
-      for (const dateStr of uniqueDates) { // iterating descending
-        if (prevDateStr === null) {
-          currentStreak = 1;
+    // Streak Calculation (Avg Max Streak Logic + Current Streak Logic)
+    let maxStreak = 0;
+    let currentStreak = 0;
+    let prevDateStr: string | null = null;
+    let currentActiveStreak = 0;
+
+    // Calculate Max Steak (History)
+    for (const dateStr of uniqueDates) { // iterating descending
+      if (prevDateStr === null) {
+        currentStreak = 1;
+      } else {
+        const d = new Date(dateStr);
+        const p = new Date(prevDateStr);
+        const diffDays = Math.ceil((p.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          currentStreak++;
         } else {
-          const d = new Date(dateStr);
-          const p = new Date(prevDateStr);
+          if (currentStreak > maxStreak) maxStreak = currentStreak;
+          currentStreak = 1;
+        }
+      }
+      prevDateStr = dateStr;
+    }
+    if (currentStreak > maxStreak) maxStreak = currentStreak;
+    streakRanking.push({ rank: 0, did, count: maxStreak, lastPostDate: uniqueDates[0] });
+
+    // Calculate Current Active Streak (Ending Today or Yesterday)
+    if (uniqueDates.length > 0) {
+      const lastActionDate = uniqueDates[0];
+      if (lastActionDate === todayStr || lastActionDate === yesterdayStr) {
+        currentActiveStreak = 1;
+        let prev = lastActionDate;
+        for (let i = 1; i < uniqueDates.length; i++) {
+          const current = uniqueDates[i];
+          const d = new Date(current);
+          const p = new Date(prev);
           const diffDays = Math.ceil((p.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+
           if (diffDays === 1) {
-            currentStreak++;
+            currentActiveStreak++;
+            prev = current;
           } else {
-            if (currentStreak > maxStreak) maxStreak = currentStreak;
-            currentStreak = 1;
+            break;
           }
         }
-        prevDateStr = dateStr;
       }
-      if (currentStreak > maxStreak) maxStreak = currentStreak;
-      streakRanking.push({ rank: 0, did, count: maxStreak, lastPostDate: uniqueDates[0] });
     }
 
     // --- New Rankings ---
 
     // 1. Rookie: First post within 5 days?
-    // Using simple timestamp comparison. 
+    let isRookie = false;
     if (firstPostDate >= fiveDaysAgo) {
-      // User says: "Count as 1 even if multiple posts per day" -> Unique Days
+      isRookie = true;
       rookieRanking.push({
         rank: 0,
         did,
@@ -130,12 +157,21 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
       });
     }
 
+    // Badge Logic
+    // 🔥：Current Stream >= 4
+    // 🔰：Rookie
+    // Priority: 🔥 > 🔰
+    if (currentActiveStreak >= 4) {
+      badges[did] = '🔥';
+    } else if (isRookie) {
+      badges[did] = '🔰';
+    }
+
     // Helper for string comparison
     const startOfWeekStr = getDid(startOfWeek.toISOString());
     const startOfMonthStr = getDid(startOfMonth.toISOString());
 
     // 2. Weekly: Count unique dates >= startOfWeek
-    // uniqueDates is sorted descending "2024-01-05", "2024-01-04"
     const weeklyCount = uniqueDates.filter(d => d >= startOfWeekStr).length;
     if (weeklyCount > 0) {
       weeklyRanking.push({
@@ -176,6 +212,7 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
     streak: streakRanking,
     rookie: rookieRanking,
     weekly: weeklyRanking,
-    monthly: monthlyRanking
+    monthly: monthlyRanking,
+    badges
   };
 }

@@ -149,4 +149,64 @@ describe('calculateRankings', () => {
     expect(b.rank).toBe(1);
     expect(c.rank).toBe(3);
   });
+
+  it('ユーザーバッジが正しく付与されること', () => {
+    // 現在時刻: 2024-01-10 (設定済み)
+
+    // Streak User: Active (本日〜3日前 = 4日間連続) -> 🔥
+    // 10(本日), 9, 8, 7 -> 4 days
+    const streakUser = [
+      createEntry('did:streakBG', '2024-01-10T10:00:00Z'),
+      createEntry('did:streakBG', '2024-01-09T10:00:00Z'),
+      createEntry('did:streakBG', '2024-01-08T10:00:00Z'),
+      createEntry('did:streakBG', '2024-01-07T10:00:00Z'),
+    ];
+
+    // Rookie User: 初投稿が5日以内 -> 🔰
+    // 2024-01-10の5日前は2024-01-05
+    // 2024-01-06に初投稿
+    const rookieUser = [
+      createEntry('did:rookieBG', '2024-01-06T10:00:00Z'),
+      createEntry('did:rookieBG', '2024-01-07T10:00:00Z'),
+    ];
+
+    // Streak & Rookie -> Priority Streak (🔥)
+    // 10, 9, 8, 7. Streak 4.
+    // First post 7. Within 5 days (5th).
+    const bothUser = [
+      createEntry('did:both', '2024-01-10T10:00:00Z'),
+      createEntry('did:both', '2024-01-09T10:00:00Z'),
+      createEntry('did:both', '2024-01-08T10:00:00Z'),
+      createEntry('did:both', '2024-01-07T10:00:00Z'),
+    ];
+
+    // Inactive Streak User -> No Badge
+    // 8, 7, 6, 5. Streak 4. Last post 8. Today 10. Gap > 1.
+    const inactiveUser = [
+      createEntry('did:inactive', '2024-01-08T10:00:00Z'),
+      createEntry('did:inactive', '2024-01-07T10:00:00Z'),
+      createEntry('did:inactive', '2024-01-06T10:00:00Z'),
+      createEntry('did:inactive', '2024-01-05T10:00:00Z'),
+    ];
+
+    // Regular User -> No Badge
+    const regularUser = [
+      createEntry('did:regular', '2024-01-02T10:00:00Z'),
+      createEntry('did:regular', '2024-01-10T10:00:00Z'),
+    ];
+
+    const result = calculateRankings([
+      ...streakUser,
+      ...rookieUser,
+      ...bothUser,
+      ...inactiveUser,
+      ...regularUser
+    ]);
+
+    expect(result.badges['did:streakBG']).toBe('🔥');
+    expect(result.badges['did:rookieBG']).toBe('🔰');
+    expect(result.badges['did:both']).toBe('🔥');
+    expect(result.badges['did:inactive']).toBeUndefined();
+    expect(result.badges['did:regular']).toBeUndefined();
+  });
 });
