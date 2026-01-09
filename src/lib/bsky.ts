@@ -248,12 +248,22 @@ export async function getEntries(did: string) {
     }
   }
 
-  const { data } = await agent.api.com.atproto.repo.listRecords({
-    repo: did,
-    collection: IDS.TriLinesEntry,
-    limit: 20
-  });
-  return data.records.map((r: any) => ({
+  let allRecords: any[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const { data } = await agent.api.com.atproto.repo.listRecords({
+      repo: did,
+      collection: IDS.TriLinesEntry,
+      limit: 100,
+      cursor: cursor
+    });
+
+    allRecords = [...allRecords, ...data.records];
+    cursor = data.cursor;
+  } while (cursor);
+
+  return allRecords.map((r: any) => ({
     ...r.value,
     uri: r.uri,
     cid: r.cid
