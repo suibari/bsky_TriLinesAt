@@ -8,10 +8,19 @@ export async function createClient() {
 
   // Hardcoded production URL for now as per user request
   const publicUrl = "https://trilinesat.suibari.com";
+  const previewUrl = "https://develop.bsky-trilinesat.pages.dev";
   const localUrl = "http://127.0.0.1:5173";
 
-  const isProd = typeof window !== 'undefined' && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-  const origin = isProd ? publicUrl : localUrl;
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : "";
+  const isPreview = hostname === "develop.bsky-trilinesat.pages.dev";
+  const isProd = hostname !== "localhost" && hostname !== "127.0.0.1" && !isPreview;
+
+  let origin = localUrl;
+  if (isProd) {
+    origin = publicUrl;
+  } else if (isPreview) {
+    origin = previewUrl;
+  }
 
   const enc = encodeURIComponent;
   const scope = "atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create";
@@ -20,6 +29,8 @@ export async function createClient() {
   let client_id = "";
   if (isProd) {
     client_id = `${publicUrl}/client-metadata.json`;
+  } else if (isPreview) {
+    client_id = `${previewUrl}/client-metadata-preview.json`;
   } else {
     // Special loopback client ID format for local dev
     // Note: redirect_uri must match exactly what is in redirect_uris
@@ -30,7 +41,7 @@ export async function createClient() {
     handleResolver: 'https://bsky.social',
     clientMetadata: {
       client_id,
-      client_name: 'TriLinesAt',
+      client_name: isPreview ? 'TriLinesAt (Preview)' : 'TriLinesAt',
       client_uri: origin,
       logo_uri: `${origin}/favicon.png`,
       tos_uri: `${origin}/tos`,
@@ -40,7 +51,7 @@ export async function createClient() {
       response_types: ['code'],
       scope,
       token_endpoint_auth_method: 'none',
-      dpop_bound_access_tokens: false,
+      dpop_bound_access_tokens: isProd || isPreview,
     },
   });
 }

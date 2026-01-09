@@ -1,0 +1,21 @@
+{
+  "client_id": "https://develop.bsky-trilinesat.pages.dev/client-metadata-preview.json",
+  "client_name": "TriLinesAt (Preview)",
+  "client_uri": "https://develop.bsky-trilinesat.pages.dev",
+  "logo_uri": "https://develop.bsky-trilinesat.pages.dev/favicon.png",
+  "tos_uri": "https://develop.bsky-trilinesat.pages.dev/tos",
+  "policy_uri": "https://develop.bsky-trilinesat.pages.dev/policy",
+  "redirect_uris": [
+    "https://develop.bsky-trilinesat.pages.dev/"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "scope": "atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create",
+  "token_endpoint_auth_method": "none",
+  "dpop_bound_access_tokens": true
+}
