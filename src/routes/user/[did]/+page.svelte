@@ -89,13 +89,58 @@
       // getEntries returns already flattened objects with uri/cid included
       const records = await getEntries(did!);
 
-      // Enrich with interactions
-      const enrichedRecords = await Promise.all(
+      // Enrich with interactions (Batched)
+      const partialEnrichedRecords = await Promise.all(
         records.map(async (r: any) => {
-          const interactions = await getPostInteractionState(r, $session.did!);
+          // Skip avatar fetch initially
+          const interactions = await getPostInteractionState(
+            r,
+            $session.did!,
+            true,
+          );
           return { ...r, ...interactions };
         }),
       );
+
+      // Collect DIDs for avatars
+      const allCandidateDids = new Set<string>();
+      partialEnrichedRecords.forEach((p: any) => {
+        if (p.candidateDids) {
+          p.candidateDids.forEach((did: string) => allCandidateDids.add(did));
+        }
+      });
+
+      // We might need a local cache of profiles if we want to show avatars
+      // For this page, we don't have a global `profiles` store used for these avatars yet.
+      // But DiaryCard expects `likeAvatars` to be populated with ProfileView objects.
+      // So we must fetch them and attach them.
+
+      const didsToFetch = Array.from(allCandidateDids);
+      let profilesMap: Record<string, any> = {};
+
+      if (didsToFetch.length > 0) {
+        // getProfiles is imported from bsky/lib
+        try {
+          // We need to import getProfiles in this file if not already
+          // It is not imported! We need to add it to imports or use the one we have?
+          // Wait, we have getEntries. We should import getProfiles.
+          // Actually, let's check imports.
+          const { getProfiles } = await import("$lib/bsky");
+          const fetchedProfiles = await getProfiles(didsToFetch);
+          profilesMap = fetchedProfiles;
+        } catch (e) {
+          console.warn("Failed to batch fetch profiles", e);
+        }
+      }
+
+      // Associate
+      const enrichedRecords = partialEnrichedRecords.map((p: any) => {
+        const avatars =
+          p.candidateDids
+            ?.map((did: string) => profilesMap[did])
+            .filter(Boolean) || [];
+        return { ...p, likeAvatars: avatars };
+      });
 
       entries = enrichedRecords;
 

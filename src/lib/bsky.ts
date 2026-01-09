@@ -629,12 +629,13 @@ export async function deleteAllData(did: string) {
   }
 }
 
-export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: string) {
+export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: string, skipAvatarFetch = false) {
   try {
     const links = await getEntryLikes(entry.uri);
     const likeCount = links.length;
     let viewerLikeUri: string | undefined;
     let avatars: any[] = [];
+    let candidateDids: string[] = [];
 
     if (viewerDid) {
       const myLike = links.find((l: any) => {
@@ -656,17 +657,17 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
       }
     }
 
-    // Get avatars (limit 5)
+    // Get candidate DIDs (limit 5)
     // We only fetch if we have DIDs and they aren't fully resolved in links
-    const uniqueDids = Array.from(new Set(links.map((l: any) => l.author || l.did).filter(Boolean))).slice(0, 5) as string[];
+    candidateDids = Array.from(new Set(links.map((l: any) => l.author || l.did).filter(Boolean))).slice(0, 5) as string[];
 
-    if (uniqueDids.length > 0) {
+    if (!skipAvatarFetch && candidateDids.length > 0) {
       // Small optimization: If we already have these profiles in a global cache, use them?
       // For now, simple fetch.
       try {
         const publicAgent = new Agent("https://public.api.bsky.app");
         const { data } = await publicAgent.app.bsky.actor.getProfiles({
-          actors: uniqueDids,
+          actors: candidateDids,
         });
         avatars = data.profiles;
       } catch {
@@ -677,11 +678,12 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
     return {
       likeCount,
       viewerLike: viewerLikeUri,
-      likeAvatars: avatars
+      likeAvatars: avatars,
+      candidateDids // Used for batch fetching
     };
 
   } catch (e) {
     console.warn(`Failed to fetch interactions for ${entry.uri}`, e);
-    return { likeCount: 0, viewerLike: undefined, likeAvatars: [] };
+    return { likeCount: 0, viewerLike: undefined, likeAvatars: [], candidateDids: [] };
   }
 }

@@ -130,24 +130,53 @@
       // User said "Fetch likes AT page access".
       // So waiting for them is acceptable or doing it in parallel.
 
-      // Let's do parallel enrichment
-      const enrichedPosts = await Promise.all(
+      // Let's do parallel enrichment with Batched Profile Fetching
+      // 1. Get Interaction State (Likes count, viewer status, candidate DIDs) - cheap PDS calls
+      const partialEnrichedPosts = await Promise.all(
         newPosts.map(async (p) => {
-          const interactions = await getPostInteractionState(p, $session.did!);
+          const interactions = await getPostInteractionState(
+            p,
+            $session.did!,
+            true,
+          ); // skipAvatarFetch=true
           return { ...p, ...interactions };
         }),
       );
 
-      // Append to master list
-      allPosts = [...allPosts, ...enrichedPosts];
+      // 2. Collect all candidate DIDs for avatars
+      const allCandidateDids = new Set<string>();
+      partialEnrichedPosts.forEach((p) => {
+        if (p.candidateDids) {
+          p.candidateDids.forEach((did) => allCandidateDids.add(did));
+        }
+      });
 
-      const newDids = [...new Set(result.posts.map((p: any) => p.authorDid))];
-      const profilesToFetch = newDids.filter((did) => !profiles[did as string]);
+      const newDids = [...new Set(result.posts.map((p: any) => p.authorDid))]; // Feed authors
+      newDids.forEach((did) => allCandidateDids.add(did as string));
 
-      if (profilesToFetch.length > 0) {
-        const newProfiles = await getProfiles(profilesToFetch as string[]);
+      // Filter out known profiles
+      const didsToFetch = Array.from(allCandidateDids).filter(
+        (did) => !profiles[did],
+      );
+
+      // 3. Batch Fetch Profiles
+      if (didsToFetch.length > 0) {
+        const newProfiles = await getProfiles(didsToFetch);
         profiles = { ...profiles, ...newProfiles };
       }
+
+      // 4. Attach Profiles to Posts
+      const enrichedPosts = partialEnrichedPosts.map((p) => {
+        const avatars =
+          p.candidateDids?.map((did) => profiles[did]).filter(Boolean) || [];
+        return {
+          ...p,
+          likeAvatars: avatars,
+        };
+      });
+
+      // Append to master list
+      allPosts = [...allPosts, ...enrichedPosts];
     } catch (e) {
       console.error("Failed to fetch more posts", e);
     } finally {

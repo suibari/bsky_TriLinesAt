@@ -36,4 +36,5 @@ export interface TriLinesEntryView extends TriLinesEntry {
   likeCount?: number;
   viewerLike?: string; // URI if liked by viewer
   likeAvatars?: any[]; // ProfileView[]
+  candidateDids?: string[]; // Temp list for batch fetching
 }
