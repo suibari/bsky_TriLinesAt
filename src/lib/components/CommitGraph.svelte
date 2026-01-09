@@ -1,8 +1,10 @@
 <script lang="ts">
   import { t } from "$lib/i18n";
   import { fade, scale } from "svelte/transition";
+  import { Loader2 } from "lucide-svelte";
 
   export let entries: any[] = [];
+  export let loading = false;
 
   // State
   let currentDate = new Date();
@@ -90,7 +92,18 @@
   ];
 </script>
 
-<div class="glass-panel p-6 w-full max-w-sm mx-auto select-none relative">
+<div
+  class="glass-panel p-6 w-full max-w-sm mx-auto select-none relative rounded-2xl overflow-hidden"
+>
+  {#if loading}
+    <div
+      class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10 transition-all duration-300"
+      transition:fade
+    >
+      <Loader2 class="animate-spin text-fuchsia-500" size={32} />
+    </div>
+  {/if}
+
   <!-- Header -->
   <div class="flex items-center justify-between mb-4">
     <button

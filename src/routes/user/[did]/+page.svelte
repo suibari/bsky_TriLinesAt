@@ -231,7 +231,7 @@
       </div>
 
       <!-- Commit Graph -->
-      <CommitGraph {entries} />
+      <CommitGraph {entries} {loading} />
 
       <!-- Entries -->
       <div class="space-y-6">
