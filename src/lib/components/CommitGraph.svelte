@@ -8,8 +8,13 @@
 
   // State
   let currentDate = new Date();
-  let hoveredDay: { day: number; entry: any; x: number; y: number } | null =
-    null;
+  let hoveredDay: {
+    day: number;
+    entry: any;
+    x: number;
+    y: number;
+    align: "left" | "center" | "right";
+  } | null = null;
   let tooltipElement: HTMLElement;
 
   // Reactive derived values
@@ -53,12 +58,20 @@
     if (entry) {
       const target = event.target as HTMLElement;
       const rect = target.getBoundingClientRect();
+
+      // Calculate alignment
+      const col = (firstDayOfWeek + day - 1) % 7;
+      let align: "left" | "center" | "right" = "center";
+      if (col <= 1) align = "left";
+      else if (col >= 5) align = "right";
+
       // Center tooltip above the cell
       hoveredDay = {
         day,
         entry,
         x: rect.left + rect.width / 2,
         y: rect.top,
+        align,
       };
     }
   }
@@ -164,8 +177,12 @@
     style="left: {hoveredDay.x}px; top: {hoveredDay.y}px;"
   >
     <div
-      class="glass-panel absolute bottom-2 left-1/2 -translate-x-1/2 w-64 p-3 rounded-lg border border-white/20 shadow-xl"
-      in:scale={{ start: 0.9, duration: 200 }}
+      class="glass-panel absolute bottom-2 w-64 p-3 rounded-lg border border-white/20 shadow-xl
+        {hoveredDay.align === 'center' ? 'left-1/2 -translate-x-1/2' : ''}
+        {hoveredDay.align === 'left' ? 'left-[-20px]' : ''}
+        {hoveredDay.align === 'right' ? 'right-[-20px]' : ''}
+      "
+      in:fade={{ duration: 150 }}
       out:fade={{ duration: 150 }}
     >
       <div class="text-xs text-slate-400 mb-1 border-b border-white/10 pb-1">
@@ -178,7 +195,11 @@
       </div>
       <!-- Triangle pointer -->
       <div
-        class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900 border-r border-b border-white/20 rotate-45"
+        class="absolute -bottom-1.5 w-3 h-3 bg-slate-900 border-r border-b border-white/20 rotate-45
+          {hoveredDay.align === 'center' ? 'left-1/2 -translate-x-1/2' : ''}
+          {hoveredDay.align === 'left' ? 'left-[20px] -translate-x-1/2' : ''}
+          {hoveredDay.align === 'right' ? 'right-[20px] translate-x-1/2' : ''}
+        "
       ></div>
     </div>
   </div>

@@ -271,8 +271,13 @@
           class="text-fuchsia-400 font-mono font-bold pt-1 opacity-50 select-none"
           >0{i + 1}</span
         >
-        <div class="flex-1 space-y-2">
-          <p class="text-lg leading-relaxed text-slate-100">{line.text}</p>
+        <div class="flex-1 space-y-2 min-w-0 overflow-hidden">
+          <p
+            class="text-lg leading-relaxed text-slate-100 break-all w-full whitespace-pre-wrap"
+            style="overflow-wrap: anywhere;"
+          >
+            {line.text}
+          </p>
           {#if line.image}
             <!-- svelte-ignore a11y-click-events-have-key-events -->
             <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
