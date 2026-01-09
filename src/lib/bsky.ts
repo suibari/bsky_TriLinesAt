@@ -436,7 +436,9 @@ export async function getAllEntriesForRanking() {
   let allLinks: any[] = [];
   let cursor: string | undefined = undefined;
   let loops = 0;
-  const MAX_LOOPS = 40; // 40 * 100 = 4000 links approx (adjusted loop count)
+  // API limit is 100. To get 10k items, we need 100 loops.
+  // This might take some time (e.g. 10-20s).
+  const MAX_LOOPS = 100;
 
   do {
     // Fetch raw links only (fast)

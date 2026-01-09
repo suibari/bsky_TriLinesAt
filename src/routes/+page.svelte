@@ -30,8 +30,15 @@
   let follows: string[] = []; // Changed to string[] for easier filtering
   let isSigningIn = false; // Loading state for sign-in redirect
 
-  let rankingData: Rankings = { total: [], streak: [] };
-  let rankingMode: "total" | "streak" = "total";
+  let rankingData: Rankings = {
+    total: [],
+    streak: [],
+    rookie: [],
+    weekly: [],
+    monthly: [],
+  };
+  let rankingMode: "total" | "streak" | "rookie" | "weekly" | "monthly" =
+    "rookie"; // Default to rookie or whatever reasonable
   let rankingLoading = false;
   let rankingFetched = false;
 
@@ -275,6 +282,9 @@
       const topDids = new Set([
         ...rankingData.total.slice(0, 50).map((r) => r.did),
         ...rankingData.streak.slice(0, 50).map((r) => r.did),
+        ...rankingData.rookie.slice(0, 50).map((r) => r.did),
+        ...rankingData.weekly.slice(0, 50).map((r) => r.did),
+        ...rankingData.monthly.slice(0, 50).map((r) => r.did),
       ]);
 
       const authorDids = Array.from(topDids);
@@ -698,28 +708,37 @@
                 </div>
               </div>
             {:else}
-              <div class="flex justify-center gap-4">
+              <div class="flex justify-center flex-wrap gap-2">
                 <button
                   class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
-                  'total'
+                  'rookie'
                     ? 'bg-fuchsia-500 text-white shadow-lg'
                     : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
-                  on:click={() => (rankingMode = "total")}
+                  on:click={() => (rankingMode = "rookie")}
                 >
-                  {$t("ranking.total")}
+                  {$t("ranking.rookie")}
                 </button>
                 <button
                   class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
-                  'streak'
+                  'weekly'
                     ? 'bg-fuchsia-500 text-white shadow-lg'
                     : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
-                  on:click={() => (rankingMode = "streak")}
+                  on:click={() => (rankingMode = "weekly")}
                 >
-                  {$t("ranking.streak")}
+                  {$t("ranking.weekly")}
+                </button>
+                <button
+                  class="px-4 py-1 rounded-full text-sm font-bold transition-colors {rankingMode ===
+                  'monthly'
+                    ? 'bg-fuchsia-500 text-white shadow-lg'
+                    : 'bg-white/5 text-slate-400 hover:bg-white/10'}"
+                  on:click={() => (rankingMode = "monthly")}
+                >
+                  {$t("ranking.monthly")}
                 </button>
               </div>
 
-              {#each (rankingMode === "total" ? rankingData.total : rankingData.streak).slice(0, 50) as item}
+              {#each (rankingMode === "rookie" ? rankingData.rookie : rankingMode === "weekly" ? rankingData.weekly : rankingData.monthly).slice(0, 50) as item}
                 <div class="glass-panel p-4 flex items-center gap-4">
                   <div
                     class="w-8 text-center font-black text-xl italic {item.rank <=
@@ -762,9 +781,7 @@
                     <div
                       class="text-[10px] text-slate-400 uppercase tracking-widest"
                     >
-                      {rankingMode === "total"
-                        ? $t("ranking.days")
-                        : $t("ranking.days")}
+                      {$t("ranking.days")}
                     </div>
                   </div>
                 </div>
