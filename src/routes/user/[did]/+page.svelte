@@ -3,6 +3,7 @@
   import { getEntries, getPostInteractionState } from "$lib/bsky";
   import { session, initSession } from "$lib/auth/session";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
+  import CommitGraph from "$lib/components/CommitGraph.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import { Agent } from "@atproto/api";
   import {
@@ -228,6 +229,9 @@
           </div>
         {/if}
       </div>
+
+      <!-- Commit Graph -->
+      <CommitGraph {entries} />
 
       <!-- Entries -->
       <div class="space-y-6">
