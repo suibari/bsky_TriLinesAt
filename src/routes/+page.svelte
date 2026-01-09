@@ -278,13 +278,11 @@
       // Calculate
       rankingData = calculateRankings(posts);
 
-      // Fetch profiles for top 50 of each (matching the UI display limit)
+      // Fetch profiles for all ranked users
       const topDids = new Set([
-        ...rankingData.total.slice(0, 50).map((r) => r.did),
-        ...rankingData.streak.slice(0, 50).map((r) => r.did),
-        ...rankingData.rookie.slice(0, 50).map((r) => r.did),
-        ...rankingData.weekly.slice(0, 50).map((r) => r.did),
-        ...rankingData.monthly.slice(0, 50).map((r) => r.did),
+        ...rankingData.rookie.map((r) => r.did),
+        ...rankingData.weekly.map((r) => r.did),
+        ...rankingData.monthly.map((r) => r.did),
       ]);
 
       const authorDids = Array.from(topDids);
@@ -738,7 +736,7 @@
                 </button>
               </div>
 
-              {#each (rankingMode === "rookie" ? rankingData.rookie : rankingMode === "weekly" ? rankingData.weekly : rankingData.monthly).slice(0, 50) as item}
+              {#each rankingMode === "rookie" ? rankingData.rookie : rankingMode === "weekly" ? rankingData.weekly : rankingData.monthly as item}
                 <div class="glass-panel p-4 flex items-center gap-4">
                   <div
                     class="w-8 text-center font-black text-xl italic {item.rank <=
