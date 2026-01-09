@@ -628,3 +628,60 @@ export async function deleteAllData(did: string) {
     });
   }
 }
+
+export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: string) {
+  try {
+    const links = await getEntryLikes(entry.uri);
+    const likeCount = links.length;
+    let viewerLikeUri: string | undefined;
+    let avatars: any[] = [];
+
+    if (viewerDid) {
+      const myLike = links.find((l: any) => {
+        const authorDid = l.author || l.did || (l.value && l.value.author) || (l.value && l.value.did);
+        return authorDid === viewerDid;
+      });
+
+      if (myLike) {
+        if (myLike.uri) {
+          viewerLikeUri = myLike.uri;
+        } else {
+          const did = myLike.author || myLike.did;
+          const rkey = myLike.rkey;
+          const collection = myLike.collection || IDS.TriLinesLike;
+          if (did && rkey) {
+            viewerLikeUri = `at://${did}/${collection}/${rkey}`;
+          }
+        }
+      }
+    }
+
+    // Get avatars (limit 5)
+    // We only fetch if we have DIDs and they aren't fully resolved in links
+    const uniqueDids = Array.from(new Set(links.map((l: any) => l.author || l.did).filter(Boolean))).slice(0, 5) as string[];
+
+    if (uniqueDids.length > 0) {
+      // Small optimization: If we already have these profiles in a global cache, use them?
+      // For now, simple fetch.
+      try {
+        const publicAgent = new Agent("https://public.api.bsky.app");
+        const { data } = await publicAgent.app.bsky.actor.getProfiles({
+          actors: uniqueDids,
+        });
+        avatars = data.profiles;
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      likeCount,
+      viewerLike: viewerLikeUri,
+      likeAvatars: avatars
+    };
+
+  } catch (e) {
+    console.warn(`Failed to fetch interactions for ${entry.uri}`, e);
+    return { likeCount: 0, viewerLike: undefined, likeAvatars: [] };
+  }
+}

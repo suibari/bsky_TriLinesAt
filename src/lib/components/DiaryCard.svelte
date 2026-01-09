@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IDS, type TriLinesEntry } from "$lib/types";
+  import { IDS, type TriLinesEntry, type TriLinesEntryView } from "$lib/types";
   import { getBlobUrl, likeEntry, unlikeEntry, getEntryLikes } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import { session } from "$lib/auth/session";
@@ -12,7 +12,7 @@
 
   const dispatch = createEventDispatcher();
 
-  export let entry: TriLinesEntry;
+  export let entry: TriLinesEntryView;
   export let author: any;
   export let rkey: string | undefined = undefined; // passed if we know it
 
@@ -38,6 +38,16 @@
   let likeLoading = false;
 
   async function loadLikes() {
+    // If passed via props, use it
+    if (typeof entry.likeCount === "number") {
+      likes = entry.likeCount;
+      liked = !!entry.viewerLike;
+      myLikeUri = entry.viewerLike;
+      likeAvatars = entry.likeAvatars || [];
+      return;
+    }
+
+    // Fallback: Fetch if not provided (retaining standalone capability)
     if (!entry?.uri) return;
     try {
       const links = await getEntryLikes(entry.uri);

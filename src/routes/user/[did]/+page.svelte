@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { getEntries } from "$lib/bsky";
+  import { getEntries, getPostInteractionState } from "$lib/bsky";
   import { session, initSession } from "$lib/auth/session";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
@@ -13,6 +13,7 @@
   } from "lucide-svelte";
   import type { ProfileView } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import { t } from "$lib/i18n";
+  import type { TriLinesEntryView } from "$lib/types";
 
   import { Confetti } from "svelte-confetti";
   import { fade, scale } from "svelte/transition";
@@ -22,7 +23,7 @@
   $: did = $page.params.did;
 
   // Core State
-  let entries: any[] = [];
+  let entries: TriLinesEntryView[] = [];
   let useProfile: any | null = null;
   let loading = true;
 
@@ -87,7 +88,16 @@
       // 2. Get Entries
       // getEntries returns already flattened objects with uri/cid included
       const records = await getEntries(did!);
-      entries = records;
+
+      // Enrich with interactions
+      const enrichedRecords = await Promise.all(
+        records.map(async (r: any) => {
+          const interactions = await getPostInteractionState(r, $session.did!);
+          return { ...r, ...interactions };
+        }),
+      );
+
+      entries = enrichedRecords;
 
       // Sort
       entries.sort(

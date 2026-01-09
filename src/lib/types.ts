@@ -30,3 +30,10 @@ export const IDS = {
   TriLinesEntry: 'blue.trilinesat.diary',
   TriLinesLike: 'blue.trilinesat.like',
 };
+
+// UI View Type (extends PDS record with transient state)
+export interface TriLinesEntryView extends TriLinesEntry {
+  likeCount?: number;
+  viewerLike?: string; // URI if liked by viewer
+  likeAvatars?: any[]; // ProfileView[]
+}

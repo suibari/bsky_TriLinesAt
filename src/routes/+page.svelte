@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { session, initSession, signIn } from "$lib/auth/session";
-  import { getFollows, getGlobalFeed, getProfiles } from "$lib/bsky";
+  import {
+    getFollows,
+    getGlobalFeed,
+    getProfiles,
+    getPostInteractionState,
+  } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import { Edit3, Compass, Users, Trophy, Loader2 } from "lucide-svelte";
@@ -12,11 +17,12 @@
   import { t, locale } from "$lib/i18n";
   import { calculateRankings, type Rankings } from "$lib/ranking";
   import { isAboutOpen } from "$lib/stores/ui";
+  import type { TriLinesEntryView } from "$lib/types";
 
   // State
   // State
   let activeTab: "following" | "global" | "ranking" = "following";
-  let entries: any[] = [];
+  let entries: TriLinesEntryView[] = [];
   let loading = true;
   let loadingMore = false;
   let cursor: string | undefined = undefined;
@@ -38,10 +44,7 @@
       allPosts[targetIndex] = {
         ...allPosts[targetIndex],
         likeCount: likeCount,
-        viewer: {
-          ...allPosts[targetIndex].viewer,
-          like: viewerLike,
-        },
+        viewerLike: viewerLike,
       };
       // Also update current view 'entries' to reflect immediately if needed
       // (Though Svelte might not react deeply if we don't reassign entries)
@@ -110,7 +113,7 @@
 
   // --- Core Logic ---
 
-  let allPosts: any[] = []; // Cache of all fetched global posts
+  let allPosts: TriLinesEntryView[] = []; // Cache of all fetched global posts
 
   async function fetchMorePosts() {
     if (loadingMore) return;
@@ -119,8 +122,24 @@
       const result = await getGlobalFeed(cursor, 50);
       cursor = result.cursor;
 
+      const newPosts: TriLinesEntryView[] = result.posts;
+
+      // Append to master list immediately to show content, then enrich
+      // Or enrich first? Enriching might take time.
+      // Better to show content then fade in likes?
+      // User said "Fetch likes AT page access".
+      // So waiting for them is acceptable or doing it in parallel.
+
+      // Let's do parallel enrichment
+      const enrichedPosts = await Promise.all(
+        newPosts.map(async (p) => {
+          const interactions = await getPostInteractionState(p, $session.did!);
+          return { ...p, ...interactions };
+        }),
+      );
+
       // Append to master list
-      allPosts = [...allPosts, ...result.posts];
+      allPosts = [...allPosts, ...enrichedPosts];
 
       const newDids = [...new Set(result.posts.map((p: any) => p.authorDid))];
       const profilesToFetch = newDids.filter((did) => !profiles[did as string]);
