@@ -21,11 +21,14 @@
   };
 
   const fallback = `https://ui-avatars.com/api/?name=User&background=random`;
+
+  $: optimizedSrc =
+    src?.replace("/img/avatar/", "/img/avatar_thumbnail/") || fallback;
 </script>
 
 <div class="relative inline-block {sizes[size]} shrink-0">
   <img
-    src={src || fallback}
+    src={optimizedSrc}
     {alt}
     class="w-full h-full object-cover rounded-full {ring
       ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-slate-900'

@@ -344,7 +344,10 @@
           >
             {#if profile.avatar}
               <img
-                src={profile.avatar}
+                src={profile.avatar?.replace(
+                  "/img/avatar/",
+                  "/img/avatar_thumbnail/",
+                )}
                 alt={profile.handle}
                 class="w-full h-full object-cover"
               />
