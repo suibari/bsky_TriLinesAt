@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 
-// vi.hoistedを使ってモック関数を定義し、vi.mock内での参照を確実にする
+// モックの定義
 const {
   mockListRecords,
   mockGetRecord,
   mockResolveHandle,
   mockGetProfiles,
   mockUploadBlob,
-  mockCreateRecord
+  mockCreateRecord,
+  mockImageCompression
 } = vi.hoisted(() => {
   return {
     mockListRecords: vi.fn(),
@@ -15,7 +16,15 @@ const {
     mockResolveHandle: vi.fn(),
     mockGetProfiles: vi.fn(),
     mockUploadBlob: vi.fn(),
-    mockCreateRecord: vi.fn()
+    mockCreateRecord: vi.fn(),
+    mockImageCompression: vi.fn()
+  };
+});
+
+// browser-image-compression のモック
+vi.mock('browser-image-compression', () => {
+  return {
+    default: mockImageCompression
   };
 });
 
@@ -90,7 +99,7 @@ vi.mock('$lib/auth/session', () => ({
   session: {}
 }));
 
-import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds } from '$lib/bsky';
+import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds, uploadImage } from '$lib/bsky';
 
 global.fetch = vi.fn();
 
@@ -98,6 +107,7 @@ describe('bsky utils', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockImageCompression.mockImplementation(async (file) => file); // デフォルトではそのまま返す(圧縮なしシミュレーション)
     vi.useFakeTimers();
   });
 
@@ -258,6 +268,32 @@ describe('bsky utils', () => {
 
       expect(result.likeCount).toBe(2);
       expect(result.viewerLike).toBe('at://did:self/like/1');
+    });
+  });
+
+  describe('uploadImage', () => {
+    it('1MB以下の画像はそのままアップロードされること', async () => {
+      const smallBlob = new Blob(['a'.repeat(500)], { type: 'image/png' });
+      mockUploadBlob.mockResolvedValue({ data: { blob: 'uploaded-blob' } });
+
+      await uploadImage(smallBlob);
+
+      expect(mockUploadBlob).toHaveBeenCalledWith(smallBlob, expect.anything());
+      expect(mockImageCompression).not.toHaveBeenCalled();
+    });
+
+    it('1MB近い画像(950KB超)は圧縮されてアップロードされること', async () => {
+      // 950KB + 1byte
+      const largeBlob = new Blob(['a'.repeat(950001)], { type: 'image/png' });
+      const compressedBlob = new Blob(['compressed'], { type: 'image/png' });
+
+      mockImageCompression.mockResolvedValue(compressedBlob);
+      mockUploadBlob.mockResolvedValue({ data: { blob: 'uploaded-blob' } });
+
+      await uploadImage(largeBlob);
+
+      expect(mockImageCompression).toHaveBeenCalled();
+      expect(mockUploadBlob).toHaveBeenCalledWith(compressedBlob, expect.anything());
     });
   });
 });

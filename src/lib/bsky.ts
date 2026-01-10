@@ -31,7 +31,32 @@ function getAgent(): Agent {
 
 export async function uploadImage(blob: Blob): Promise<BlobRef> {
   const agent = getAgent();
-  const { data } = await agent.uploadBlob(blob, { encoding: blob.type });
+  let blobToUpload = blob;
+
+  // Bluesky (AT Protocol) has a 1MB limit for blobs.
+  // We use 950KB as a safe threshold.
+  if (blob.size > 950000) {
+    console.log(`Image size ${blob.size} exceeds limit, compressing...`);
+    try {
+      // dynamic import to avoid SSR issues if this file is imported on server, 
+      // though bsky.ts seems client-heavy. But browser-image-compression is browser only.
+      const imageCompression = (await import('browser-image-compression')).default;
+
+      const imageFile = new File([blob], "image.png", { type: blob.type });
+      const options = {
+        maxSizeMB: 0.9,
+        maxWidthOrHeight: 2048,
+        useWebWorker: true,
+        fileType: blob.type as string
+      };
+      blobToUpload = await imageCompression(imageFile, options);
+      console.log(`Compressed image size: ${blobToUpload.size}`);
+    } catch (e) {
+      console.error("Image compression failed, proceeding with original", e);
+    }
+  }
+
+  const { data } = await agent.uploadBlob(blobToUpload, { encoding: blobToUpload.type });
   return data.blob;
 }
 
