@@ -199,7 +199,30 @@
       );
     } catch (e) {
       console.error(e);
-      alert("Failed to post diary.");
+      let errorMessage = "Failed to post diary."; // Default
+
+      if (typeof e === "object" && e !== null) {
+        const err = e as any;
+        if (
+          err.status === 413 ||
+          err.message?.includes("too large") ||
+          err.error === "ImageTooLarge"
+        ) {
+          errorMessage =
+            "Image upload failed: The image is too large (Limit is ~975KB).";
+        } else if (
+          err.status === 401 ||
+          err.error === "AuthenticationRequired"
+        ) {
+          errorMessage = "Session expired. Please sign in again.";
+        } else if (err.status === 429) {
+          errorMessage =
+            "Rate limit exceeded. Please wait a moment before trying again.";
+        } else if (err.message) {
+          errorMessage = `Error: ${err.message}`;
+        }
+      }
+      alert(errorMessage);
       // Do NOT clear draft here so user can retry
     } finally {
       submitting = false;
