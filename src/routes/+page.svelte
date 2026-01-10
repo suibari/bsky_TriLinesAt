@@ -124,7 +124,7 @@
 
   let allPosts: TriLinesEntryView[] = []; // Cache of all fetched global posts
 
-  async function fetchMorePosts() {
+  async function fetchMorePosts(onContentReady?: () => void) {
     if (loadingMore) return;
     loadingMore = true;
     try {
@@ -133,16 +133,30 @@
 
       const newPosts: TriLinesEntryView[] = result.posts;
 
-      // Append to master list immediately to show content, then enrich
-      // Or enrich first? Enriching might take time.
-      // Better to show content then fade in likes?
-      // User said "Fetch likes AT page access".
-      // So waiting for them is acceptable or doing it in parallel.
+      // PHASE 1: Immediate Render (Skeleton Mode)
+      // Append raw posts immediately so the user sees *something*
+      // Duduplicate based on URI to prevent issues if same posts fetched
+      const existingUris = new Set(allPosts.map((p) => p.uri));
+      const uniqueNewPosts = newPosts.filter((p) => !existingUris.has(p.uri));
 
-      // Let's do parallel enrichment with Batched Profile Fetching
-      // 1. Get Interaction State (Likes count, viewer status, candidate DIDs) - cheap PDS calls
-      const partialEnrichedPosts = await Promise.all(
-        newPosts.map(async (p) => {
+      if (uniqueNewPosts.length > 0) {
+        allPosts = [...allPosts, ...uniqueNewPosts];
+        updateFilteredEntries();
+      }
+
+      // Signal that content is ready for display
+      if (onContentReady) {
+        onContentReady();
+        // Yield to allow UI render
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      // PHASE 2: Background Hydration
+      // interactions (likes) and profiles
+
+      // 1. Get Interaction State (Likes count, viewer status, candidate DIDs)
+      const enrichedNewPosts = await Promise.all(
+        uniqueNewPosts.map(async (p) => {
           const interactions = await getPostInteractionState(
             p,
             $session.did!,
@@ -152,16 +166,16 @@
         }),
       );
 
-      // 2. Collect all candidate DIDs for avatars
+      // 2. Collect all candidate DIDs for avatars (authors + likers)
       const allCandidateDids = new Set<string>();
-      partialEnrichedPosts.forEach((p) => {
+      enrichedNewPosts.forEach((p) => {
+        // Author
+        if (p.authorDid) allCandidateDids.add(p.authorDid);
+        // Likers
         if (p.candidateDids) {
           p.candidateDids.forEach((did) => allCandidateDids.add(did));
         }
       });
-
-      const newDids = [...new Set(result.posts.map((p: any) => p.authorDid))]; // Feed authors
-      newDids.forEach((did) => allCandidateDids.add(did as string));
 
       // Filter out known profiles
       const didsToFetch = Array.from(allCandidateDids).filter(
@@ -174,8 +188,12 @@
         profiles = { ...profiles, ...newProfiles };
       }
 
-      // 4. Attach Profiles to Posts
-      const enrichedPosts = partialEnrichedPosts.map((p) => {
+      // 4. Attach Profiles to Posts (for likers mainly, author is looked up by ID in template)
+      // We need to update the `allPosts` array with the new 'enriched' versions that have `likeAvatars` populated?
+      // Actually `getPostInteractionState` returns `likeAvatars` as empty if we skipped fetch.
+      // We need to populate `likeAvatars` using `profiles` now.
+
+      const fullyEnrichedPosts = enrichedNewPosts.map((p) => {
         const avatars =
           p.candidateDids?.map((did) => profiles[did]).filter(Boolean) || [];
         return {
@@ -184,10 +202,24 @@
         };
       });
 
-      // Append to master list
-      allPosts = [...allPosts, ...enrichedPosts];
+      // Update `allPosts` with fully enriched data
+      // We need to replace the raw posts we added earlier with these enriched ones.
+      // Efficiency: Map specific indices or just map the whole array?
+      // Since `allPosts` grows, let's just update the ones we just added.
+      // We can create a map of uri -> enrichedPost
+      const updates = new Map(fullyEnrichedPosts.map((p) => [p.uri, p]));
+
+      allPosts = allPosts.map((p) => {
+        const update = updates.get(p.uri);
+        return update ? update : p;
+      });
+
+      // Re-render to show Likes/Avatars
+      updateFilteredEntries();
     } catch (e) {
       console.error("Failed to fetch more posts", e);
+      // Ensure we unblock if error occurs during Phase 1
+      if (onContentReady) onContentReady();
     } finally {
       loadingMore = false;
     }
@@ -244,21 +276,29 @@
         }
       });
 
-      // Fetch posts in parallel
-      const postsPromise = fetchMorePosts().then(() => {
-        updateFilteredEntries();
+      // Fetch posts in parallel (Render-then-Hydrate)
+      // We want to stop loading as soon as content is ready (Phase 1)
+      let resolvePostsReady: () => void;
+      const postsReadyPromise = new Promise<void>((r) => {
+        resolvePostsReady = r;
       });
 
-      // Fetch Ranking in background (fire and forget for main thread, but track state)
+      // Fire and forget the full process, but track readiness
+      fetchMorePosts(resolvePostsReady!).catch((e) => {
+        console.error("Initial post fetch failed", e);
+        resolvePostsReady!(); // Ensure we don't hang
+      });
+
+      // Fetch Ranking in background
       fetchRankingData();
 
       // Wait strategy:
-      // If we are on "following" and have NO cache, we must wait for both.
-      // Otherwise (Global tab OR cached follows), we only need to wait for posts to show something.
+      // If we are on "following" and have NO cache, we must wait for follows + posts.
+      // Otherwise (Global tab OR cached follows), we only wait for posts to be ready.
       if (activeTab === "following" && !cached) {
-        await Promise.all([followsPromise, postsPromise]);
+        await Promise.all([followsPromise, postsReadyPromise]);
       } else {
-        await postsPromise;
+        await postsReadyPromise;
       }
     } catch (e) {
       console.error(e);
