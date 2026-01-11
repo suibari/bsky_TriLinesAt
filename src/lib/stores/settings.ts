@@ -1,11 +1,15 @@
 import { writable } from 'svelte/store';
 
-interface Settings {
+// Define the shape of our settings
+export interface Settings {
+  hideRanking: boolean;
   timeCapsuleEnabled: boolean;
 }
 
+// Default settings
 const defaultSettings: Settings = {
-  timeCapsuleEnabled: true,
+  hideRanking: false,
+  timeCapsuleEnabled: true, // Default to true or user preference
 };
 
 function createSettingsStore() {
@@ -15,23 +19,29 @@ function createSettingsStore() {
     subscribe,
     set,
     update,
+    // Initialize from localStorage on mount (client-side only)
     init: () => {
-      if (typeof localStorage !== 'undefined') {
-        const stored = localStorage.getItem('trilines_settings');
-        if (stored) {
-          try {
-            set({ ...defaultSettings, ...JSON.parse(stored) });
-          } catch (e) {
-            console.warn('Failed to parse settings');
-          }
+      if (typeof window === 'undefined') return;
+
+      const stored = localStorage.getItem('trilines_settings');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          set({ ...defaultSettings, ...parsed });
+        } catch (e) {
+          console.warn('Failed to parse settings', e);
         }
       }
+
+      // Subscribe to changes to persist them
+      subscribe((value) => {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('trilines_settings', JSON.stringify(value));
+        }
+      });
     },
-    save: (settings: Settings) => {
-      set(settings);
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('trilines_settings', JSON.stringify(settings));
-      }
+    toggleHideRanking: () => {
+      update((s) => ({ ...s, hideRanking: !s.hideRanking }));
     },
     toggleTimeCapsule: () => {
       update(s => {

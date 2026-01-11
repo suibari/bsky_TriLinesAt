@@ -84,6 +84,37 @@
       </div>
     </div>
 
+    <!-- Additional Settings -->
+    <div class="glass-panel rounded-xl p-6 space-y-4">
+      <!-- Hide Ranking -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-lg text-fuchsia-300">
+            {$t("settings.hideRanking")}
+          </h3>
+          <p class="text-sm text-slate-400 mt-1">
+            {$t("settings.hideRanking_desc")}
+          </p>
+        </div>
+
+        <button
+          class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          class:bg-fuchsia-600={$settings.hideRanking}
+          class:bg-slate-700={!$settings.hideRanking}
+          on:click={() => settings.toggleHideRanking()}
+          role="switch"
+          aria-checked={$settings.hideRanking}
+          aria-label={$t("settings.hideRanking")}
+        >
+          <span
+            class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+            class:translate-x-6={$settings.hideRanking}
+            class:translate-x-1={!$settings.hideRanking}
+          ></span>
+        </button>
+      </div>
+    </div>
+
     <!-- Danger Zone -->
     <div class="glass-panel rounded-xl p-6 space-y-4 border border-red-500/20">
       <div>

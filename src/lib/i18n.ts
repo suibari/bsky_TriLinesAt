@@ -65,6 +65,8 @@ export const translations = {
 
     // Settings
     "settings.title": "Settings",
+    "settings.hideRanking": "Hide Ranking Tab",
+    "settings.hideRanking_desc": "Hide the ranking tab from the main feed.",
     "settings.timecapsule": "Time Capsule (Show past entries)",
     "settings.timecapsule_desc": "Display random lines from your past diary entries in the background of the editor.",
     "settings.danger_zone": "Danger Zone",
@@ -136,6 +138,8 @@ export const translations = {
 
     // Settings
     "settings.title": "設定",
+    "settings.hideRanking": "ランキングタブを隠す",
+    "settings.hideRanking_desc": "メインフィードからランキングタブを非表示にします。",
     "settings.timecapsule": "タイムカプセル機能",
     "settings.timecapsule_desc": "日記作成画面の背景に、過去の日記をランダムに表示します。",
     "settings.danger_zone": "日記データ削除",

@@ -19,6 +19,7 @@
   import { isAboutOpen } from "$lib/stores/ui";
   import type { TriLinesEntryView } from "$lib/types";
   import { userBadges } from "$lib/stores/badges";
+  import { settings } from "$lib/stores/settings";
 
   // State
   // State
@@ -43,6 +44,11 @@
     "rookie"; // Default to rookie or whatever reasonable
   let rankingLoading = false;
   let rankingFetched = false;
+
+  // Watch for settings changes to redirect if on hidden tab
+  $: if ($settings.hideRanking && activeTab === "ranking") {
+    activeTab = "following";
+  }
 
   function handleEntryUpdate(e: CustomEvent) {
     const { uri, isLiked, likeCount, viewerLike } = e.detail;
@@ -458,6 +464,7 @@
           animateTabSwitch("right", () => switchToFollowing());
           return;
         } else if (activeTab === "ranking") {
+          // Should not happen if hidden, but safe to allow exit
           animateTabSwitch("right", () => switchToGlobal());
           return;
         }
@@ -467,7 +474,9 @@
           animateTabSwitch("left", () => switchToGlobal());
           return;
         } else if (activeTab === "global") {
-          animateTabSwitch("left", () => switchToRanking());
+          if (!$settings.hideRanking) {
+            animateTabSwitch("left", () => switchToRanking());
+          }
           return;
         }
       }
@@ -644,16 +653,18 @@
           <Compass size={16} />
           <span class="whitespace-nowrap">{$t("feed.global")}</span>
         </button>
-        <button
-          class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
-          'ranking'
-            ? 'bg-white/10 text-white shadow-sm'
-            : 'text-slate-400 hover:text-white'}"
-          on:click={switchToRanking}
-        >
-          <Trophy size={16} />
-          <span class="whitespace-nowrap">{$t("feed.ranking")}</span>
-        </button>
+        {#if !$settings.hideRanking}
+          <button
+            class="flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 {activeTab ===
+            'ranking'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-slate-400 hover:text-white'}"
+            on:click={switchToRanking}
+          >
+            <Trophy size={16} />
+            <span class="whitespace-nowrap">{$t("feed.ranking")}</span>
+          </button>
+        {/if}
       </div>
 
       <!-- Feed -->
