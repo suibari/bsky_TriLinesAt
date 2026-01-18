@@ -154,10 +154,38 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
       const currentLocale = get(locale);
       const template = get(t)('share.template');
       const entryUrl = `https://trilinesat.suibari.com/entry/${sessionDid}/${rkey}`;
-      const postText = `${template}\n\n${summary}\n\n${entryUrl}\n\n#TriLinesAt`;
+
+      const linkLabel = "📓TriLinesAtで見る";
+
+      // Construct text components
+      const part1 = `${template}\n\n${summary}\n\n`;
+      const part2 = linkLabel;
+      const part3 = `\n\n#TriLinesAt`;
+
+      const postText = part1 + part2 + part3;
 
       const rt = new RichText({ text: postText });
       await rt.detectFacets(agent);
+
+      // Create custom link facet
+      const encoder = new TextEncoder();
+      const byteStart = encoder.encode(part1).byteLength;
+      const byteEnd = byteStart + encoder.encode(part2).byteLength;
+
+      const linkFacet = {
+        index: {
+          byteStart,
+          byteEnd
+        },
+        features: [{
+          $type: 'app.bsky.richtext.facet#link',
+          uri: entryUrl
+        }]
+      };
+
+      // Add to facets (ensure array exists)
+      if (!rt.facets) rt.facets = [];
+      rt.facets.push(linkFacet);
 
       const post = await agent.api.com.atproto.repo.createRecord({
         repo: sessionDid,
