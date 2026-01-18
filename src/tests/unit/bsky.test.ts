@@ -66,40 +66,64 @@ vi.mock('svelte/store', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as object),
-    get: vi.fn(() => ({
-      did: 'did:self',
-      agent: {
-        api: {
-          com: {
-            atproto: {
-              repo: {
-                listRecords: mockListRecords,
-                getRecord: mockGetRecord,
-                createRecord: mockCreateRecord,
+    get: vi.fn((store) => {
+      if (store && store._id === 't') {
+        return (key: string) => {
+          if (key === 'share.template') return 'Diary Entry:';
+          return key;
+        };
+      }
+      if (store && store._id === 'locale') {
+        return 'en';
+      }
+
+      // Default to session behavior (or specific check for session)
+      return {
+        did: 'did:self',
+        agent: {
+          api: {
+            com: {
+              atproto: {
+                repo: {
+                  listRecords: mockListRecords,
+                  getRecord: mockGetRecord,
+                  createRecord: mockCreateRecord,
+                  putRecord: vi.fn(), // Needed for createDiary update
+                  deleteRecord: vi.fn()
+                }
+              }
+            }
+          },
+          resolveHandle: mockResolveHandle,
+          uploadBlob: mockUploadBlob,
+          app: {
+            bsky: {
+              actor: {
+                getProfiles: mockGetProfiles
+              },
+              graph: {
+                getFollows: vi.fn().mockResolvedValue({ data: { follows: [] } })
               }
             }
           }
-        },
-        resolveHandle: mockResolveHandle,
-        uploadBlob: mockUploadBlob,
-        app: {
-          bsky: {
-            actor: {
-              getProfiles: mockGetProfiles
-            }
-          }
         }
-      }
-    }))
+      };
+    })
   };
 });
 
 // $lib/auth/session のモック
 vi.mock('$lib/auth/session', () => ({
-  session: {}
+  session: { _id: 'session' }
 }));
 
-import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds, uploadImage } from '$lib/bsky';
+// $lib/i18n のモック
+vi.mock('$lib/i18n', () => ({
+  t: { _id: 't' },
+  locale: { _id: 'locale' }
+}));
+
+import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds, uploadImage, createDiary } from '$lib/bsky';
 
 global.fetch = vi.fn();
 
@@ -294,6 +318,47 @@ describe('bsky utils', () => {
 
       expect(mockImageCompression).toHaveBeenCalled();
       expect(mockUploadBlob).toHaveBeenCalledWith(compressedBlob, expect.anything());
+    });
+  });
+
+  describe('createDiary', () => {
+    it('Blueskyに共有する場合、リンクファセット付きで投稿されること', async () => {
+      mockCreateRecord.mockResolvedValue({
+        data: { uri: 'at://did:self/app.bsky.feed.post/rkey123', cid: 'cid' }
+      });
+      mockUploadBlob.mockResolvedValue({ data: { blob: 'blob' } });
+
+      const lines = [{ text: 'Diary entry' }];
+      await createDiary(lines, true);
+
+      // Verify the post creation call (second call)
+      // First call is creating the TriLinesEntry, second is sharing to Bluesky
+      expect(mockCreateRecord).toHaveBeenCalledTimes(2);
+
+      const postCall = mockCreateRecord.mock.calls[1][0];
+      expect(postCall.collection).toBe('app.bsky.feed.post');
+
+      const record = postCall.record;
+      // text should contain the link label
+      expect(record.text).toContain('📓TriLinesAtで見る');
+      // text should NOT contain the raw URL
+      expect(record.text).not.toContain('https://trilinesat.suibari.com/entry/did:self/');
+
+      // Check facets
+      expect(record.facets).toBeDefined();
+      const linkFacet = record.facets.find((f: any) =>
+        f.features[0].$type === 'app.bsky.richtext.facet#link'
+      );
+      expect(linkFacet).toBeDefined();
+      expect(linkFacet.features[0].uri).toMatch(/https:\/\/trilinesat\.suibari\.com\/entry\/did:self\/.*/);
+
+      // Verify text slice matches the link label
+      const encoder = new TextEncoder();
+      const textBuffer = encoder.encode(record.text);
+      const linkText = new TextDecoder().decode(
+        textBuffer.slice(linkFacet.index.byteStart, linkFacet.index.byteEnd)
+      );
+      expect(linkText).toBe('📓TriLinesAtで見る');
     });
   });
 });
