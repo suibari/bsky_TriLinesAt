@@ -119,8 +119,6 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
       prevDateStr = dateStr;
     }
     if (currentStreak > maxStreak) maxStreak = currentStreak;
-    streakRanking.push({ rank: 0, did, count: maxStreak, lastPostDate: uniqueDates[0] });
-
     // Calculate Current Active Streak (Ending Today or Yesterday)
     if (uniqueDates.length > 0) {
       const lastActionDate = uniqueDates[0];
@@ -142,6 +140,8 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
         }
       }
     }
+
+    streakRanking.push({ rank: 0, did, count: currentActiveStreak, lastPostDate: uniqueDates[0] });
 
     // --- New Rankings ---
 

@@ -80,8 +80,8 @@ describe('calculateRankings', () => {
 
     const result = calculateRankings(entries);
 
-    // ストリーク: 1月8日, 9日, 10日 -> 3日間
-    expect(result.streak[0]).toMatchObject({ did: 'did:streak', count: 3 });
+    // ストリーク: 1月9日, 10日 -> 2日間 (active)
+    expect(result.streak[0]).toMatchObject({ did: 'did:streak', count: 2 });
   });
 
   it('初投稿が5日以内の場合、ルーキーとして識別されること', () => {
