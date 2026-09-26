@@ -37,6 +37,7 @@
   $: placeholders = getRandomPlaceholders(3, $locale);
 
   let shareToBluesky = false; // Default OFF (safer side)
+  let shareToNagi = false;
   let rememberSettings = false;
   let submitting = false;
   let isLoaded = false;
@@ -58,6 +59,7 @@
       if (storedRemember) {
         shareToBluesky =
           localStorage.getItem("settings.shareToBluesky") === "true";
+        shareToNagi = localStorage.getItem("settings.shareToNagi") === "true";
       }
 
       // Load draft
@@ -102,8 +104,10 @@
     localStorage.setItem("settings.rememberShare", String(rememberSettings));
     if (rememberSettings) {
       localStorage.setItem("settings.shareToBluesky", String(shareToBluesky));
+      localStorage.setItem("settings.shareToNagi", String(shareToNagi));
     } else {
       localStorage.removeItem("settings.shareToBluesky");
+      localStorage.removeItem("settings.shareToNagi");
     }
 
     // Save Draft (Debouncing logic is natural via Svelte reactive block, but strictly it saves on every keystroke.
@@ -146,10 +150,19 @@
     submitting = true;
 
     try {
-      await createDiary(
+      const { shareErrors } = await createDiary(
         lines.map((l) => ({ text: l.text, image: l.image })),
-        shareToBluesky,
+        { bluesky: shareToBluesky, nagi: shareToNagi },
       );
+
+      // The diary itself is saved; only report which crossposts failed
+      if (shareErrors.length > 0) {
+        alert(
+          shareErrors
+            .map((target) => $t(`share.error_${target}` as any))
+            .join("\n"),
+        );
+      }
 
       // Clear draft on success
       if (typeof localStorage !== "undefined") {
@@ -319,6 +332,22 @@
           <input
             type="checkbox"
             bind:checked={shareToBluesky}
+            class="sr-only peer"
+          />
+          <div
+            class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"
+          ></div>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-slate-300"
+          >{$t("editor.share_nagi")}</span
+        >
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            bind:checked={shareToNagi}
             class="sr-only peer"
           />
           <div

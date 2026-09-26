@@ -8,6 +8,12 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+
+	interface ImportMetaEnv {
+		readonly PUBLIC_APP_URL?: string;
+		readonly PUBLIC_PREVIEW_URL?: string;
+		readonly PUBLIC_NAGI_URL?: string;
+	}
 }
 
 export {};
