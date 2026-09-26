@@ -11,6 +11,7 @@ Based on the "Three Good Things" method, it encourages users to record three pos
     -   **Following Feed**: See diary entries from users you follow.
     -   **Global Feed**: Discover entries from all TriLinesAt users.
     -   **Likes**: Interact with entries using the "Star" action (synced with PDS).
+-   **Crossposting**: Optionally share each entry to Bluesky and/or [Nagi](https://nagi.suibari.com) (`com.suibari.nagi.post`).
 -   **Data Sovereignty**: All diary entries are stored in the user's own **Personal Data Server (PDS)** in the `blue.trilinesat.diary` collection.
 -   **OAuth Authentication**: Secure login using Bluesky OAuth (no App Passwords required).
 -   **Gamification**:
@@ -48,14 +49,24 @@ Based on the "Three Good Things" method, it encourages users to record three pos
     npm install
     ```
 
-3.  Start the development server:
+3.  (Optional) Configure environment variables:
+    ```bash
+    cp .env.example .env
+    ```
+    All variables are optional and default to the production values. See `.env.example`.
+
+4.  Start the development server:
     ```bash
     npm run dev
     ```
 
-4.  Open `http://localhost:5173` in your browser.
+5.  Open `http://127.0.0.1:5173` in your browser.
 
-    > **Note**: OAuth requires a publicly accessible URL or a specific localhost configuration registered with the OAuth client. For local development, ensure your `client-metadata.json` matches your environment.
+    > **Note**: Local development uses the OAuth loopback client (no metadata file needed). Production and preview use `static/client-metadata.json` / `static/client-metadata-preview.json`; if you change `PUBLIC_APP_URL` / `PUBLIC_PREVIEW_URL` or the OAuth scope, update those files to match.
+
+### Lexicons
+
+Schemas for the app's own record types are in `lexicons/` (`blue.trilinesat.diary`, `blue.trilinesat.like`).
 
 ## License
 

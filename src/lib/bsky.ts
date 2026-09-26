@@ -4,6 +4,7 @@ import { TID } from '@atproto/common-web';
 import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
 import { Agent, RichText, type BlobRef } from '@atproto/api';
 import { t, locale } from './i18n';
+import { getAppOrigin } from './config';
 
 // Helper to extract timestamp from TID rkey
 // Using official library for reliability.
@@ -76,7 +77,57 @@ function getImageDims(blob: Blob): Promise<{ width: number; height: number }> {
   });
 }
 
-export async function createDiary(lines: { text: string; image?: Blob }[], shareToBluesky: boolean) {
+export type ShareTarget = 'bluesky' | 'nagi';
+
+// Builds the share post text with a link facet pointing to the entry page.
+// Facets use app.bsky.richtext.facet, which Nagi posts share.
+async function buildShareText(agent: Agent, lines: { text: string }[], did: string, rkey: string) {
+  const rawSummary = lines.map(l => l.text).join('\n');
+  const summary = rawSummary.length > 200
+    ? rawSummary.substring(0, 200) + '...'
+    : rawSummary;
+
+  // Get localized template
+  const template = get(t)('share.template');
+  const entryUrl = `${getAppOrigin()}/entry/${did}/${rkey}`;
+
+  const linkLabel = "📓TriLinesAtで見る";
+
+  // Construct text components
+  const part1 = `${template}\n\n${summary}\n\n`;
+  const part2 = linkLabel;
+  const part3 = `\n\n#TriLinesAt`;
+
+  const rt = new RichText({ text: part1 + part2 + part3 });
+  await rt.detectFacets(agent);
+
+  // Create custom link facet
+  const encoder = new TextEncoder();
+  const byteStart = encoder.encode(part1).byteLength;
+  const byteEnd = byteStart + encoder.encode(part2).byteLength;
+
+  const linkFacet = {
+    index: {
+      byteStart,
+      byteEnd
+    },
+    features: [{
+      $type: 'app.bsky.richtext.facet#link',
+      uri: entryUrl
+    }]
+  };
+
+  // Add to facets (ensure array exists)
+  if (!rt.facets) rt.facets = [];
+  rt.facets.push(linkFacet);
+
+  return { text: rt.text, facets: rt.facets };
+}
+
+export async function createDiary(
+  lines: { text: string; image?: Blob }[],
+  share: { bluesky: boolean; nagi: boolean }
+) {
   const agent = getAgent();
   const sessionDid = get(session).did!;
 
@@ -84,7 +135,7 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
   const processedLines: TriLinesLine[] = [];
 
   // Define type locally or import if available. 
-  // app.bsky.embed.images#image structure
+  // app.bsky.embed.images#image structure (also valid for com.suibari.nagi.post#image)
   interface EmbedImage {
     image: BlobRef;
     alt: string;
@@ -139,79 +190,67 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
 
   if (!rkey) throw new Error("Failed to generate rkey");
 
-  let sharedPost;
+  const shareErrors: ShareTarget[] = [];
+  let linkError = false;
+  if (!share.bluesky && !share.nagi) {
+    return { entry: entryData, shareErrors, linkError };
+  }
 
-  // 3. Share to Bluesky if requested
-  if (shareToBluesky) {
+  // 3. Share to Bluesky / Nagi if requested (independently; one failing doesn't block the other)
+  let shareText: { text: string; facets: any[] };
+  try {
+    shareText = await buildShareText(agent, lines, sessionDid, rkey);
+  } catch (e) {
+    console.warn("Failed to build share text", e);
+    if (share.bluesky) shareErrors.push('bluesky');
+    if (share.nagi) shareErrors.push('nagi');
+    return { entry: entryData, shareErrors, linkError };
+  }
+  const langs = [get(locale)];
+  const images = embedImages.slice(0, 4);
+
+  const createPost = (collection: string, embed: object | undefined) =>
+    agent.api.com.atproto.repo.createRecord({
+      repo: sessionDid,
+      collection,
+      // PDS doesn't know the Nagi lexicon, so skip server-side validation for it
+      ...(collection === IDS.NagiPost && { validate: false }),
+      record: {
+        $type: collection,
+        text: shareText.text,
+        facets: shareText.facets,
+        createdAt,
+        langs,
+        embed
+      },
+    }).then(res => ({ uri: res.data.uri, cid: res.data.cid }));
+
+  const [blueskyResult, nagiResult] = await Promise.allSettled([
+    share.bluesky
+      ? createPost('app.bsky.feed.post', images.length > 0 ? { $type: 'app.bsky.embed.images', images } : undefined)
+      : Promise.resolve(undefined),
+    share.nagi
+      ? createPost(IDS.NagiPost, images.length > 0 ? { $type: `${IDS.NagiPost}#images`, images } : undefined)
+      : Promise.resolve(undefined),
+  ]);
+
+  const updatedRecord = { ...initialRecord };
+  if (blueskyResult.status === 'fulfilled') {
+    updatedRecord.sharedPost = blueskyResult.value;
+  } else {
+    console.warn("Failed to share to Bluesky", blueskyResult.reason);
+    shareErrors.push('bluesky');
+  }
+  if (nagiResult.status === 'fulfilled') {
+    updatedRecord.sharedNagiPost = nagiResult.value;
+  } else {
+    console.warn("Failed to share to Nagi", nagiResult.reason);
+    shareErrors.push('nagi');
+  }
+
+  // 4. Update the Custom Record with shared post refs
+  if (updatedRecord.sharedPost || updatedRecord.sharedNagiPost) {
     try {
-      // Create a summary for the post
-      const rawSummary = lines.map(l => l.text).join('\n');
-      const summary = rawSummary.length > 200
-        ? rawSummary.substring(0, 200) + '...'
-        : rawSummary;
-
-      // Get localized template and language code
-      const currentLocale = get(locale);
-      const template = get(t)('share.template');
-      const entryUrl = `https://trilinesat.suibari.com/entry/${sessionDid}/${rkey}`;
-
-      const linkLabel = "📓TriLinesAtで見る";
-
-      // Construct text components
-      const part1 = `${template}\n\n${summary}\n\n`;
-      const part2 = linkLabel;
-      const part3 = `\n\n#TriLinesAt`;
-
-      const postText = part1 + part2 + part3;
-
-      const rt = new RichText({ text: postText });
-      await rt.detectFacets(agent);
-
-      // Create custom link facet
-      const encoder = new TextEncoder();
-      const byteStart = encoder.encode(part1).byteLength;
-      const byteEnd = byteStart + encoder.encode(part2).byteLength;
-
-      const linkFacet = {
-        index: {
-          byteStart,
-          byteEnd
-        },
-        features: [{
-          $type: 'app.bsky.richtext.facet#link',
-          uri: entryUrl
-        }]
-      };
-
-      // Add to facets (ensure array exists)
-      if (!rt.facets) rt.facets = [];
-      rt.facets.push(linkFacet);
-
-      const post = await agent.api.com.atproto.repo.createRecord({
-        repo: sessionDid,
-        collection: 'app.bsky.feed.post',
-        record: {
-          $type: 'app.bsky.feed.post',
-          text: rt.text,
-          facets: rt.facets,
-          createdAt,
-          langs: [currentLocale],
-          embed: embedImages.length > 0 ? {
-            $type: 'app.bsky.embed.images',
-            images: embedImages.slice(0, 4)
-          } : undefined
-        },
-      });
-      sharedPost = { uri: post.data.uri, cid: post.data.cid };
-
-      // 4. Update the Custom Record with sharedPost info
-      const updatedRecord = {
-        ...initialRecord,
-        sharedPost
-      };
-
-      // We use applyWrites or putRecord. putRecord is simpler for single update.
-      // But we need to use com.atproto.repo.putRecord
       await agent.api.com.atproto.repo.putRecord({
         repo: sessionDid,
         collection: IDS.TriLinesEntry,
@@ -219,16 +258,14 @@ export async function createDiary(lines: { text: string; image?: Blob }[], share
         record: updatedRecord as any,
         swapRecord: entryCid // optimistic concurrency control
       });
-
     } catch (e) {
-      console.warn("Failed to share to Bluesky or update record", e);
-      // We don't fail the whole operation if sharing fails, 
-      // but the user might want to know. For now, we return the entryData.
+      // Posts exist but the entry won't link to them. Not fatal for the diary itself.
+      console.warn("Failed to update record with shared post refs", e);
+      linkError = true;
     }
   }
 
-  // Return the initial entry data (or could return updated, but UI just needs URI usually)
-  return entryData;
+  return { entry: entryData, shareErrors, linkError };
 }
 
 export async function deleteRecord(uri: string) {
@@ -319,7 +356,8 @@ export async function getEntries(did: string) {
   return allRecords.map((r: any) => ({
     ...r.value,
     uri: r.uri,
-    cid: r.cid
+    cid: r.cid,
+    authorDid: did // Don't trust authorDid in the record body
   }));
 }
 

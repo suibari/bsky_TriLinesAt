@@ -1,36 +1,22 @@
 import { BrowserOAuthClient } from '@atproto/oauth-client-browser';
+import { APP_URL, PREVIEW_URL, detectAppEnv, getAppOrigin } from '$lib/config';
 
 // This function initializes the client. 
 export async function createClient() {
-  // 1. Determine environment
-  // In Vite, import.meta.env.DEV is true for dev.
-  // Or we can check window.location.hostname
-
-  // Hardcoded production URL for now as per user request
-  const publicUrl = "https://trilinesat.suibari.com";
-  const previewUrl = "https://develop.bsky-trilinesat.pages.dev";
-  const localUrl = "http://127.0.0.1:5173";
-
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : "";
-  const isPreview = hostname === "develop.bsky-trilinesat.pages.dev";
-  const isProd = hostname !== "localhost" && hostname !== "127.0.0.1" && !isPreview;
-
-  let origin = localUrl;
-  if (isProd) {
-    origin = publicUrl;
-  } else if (isPreview) {
-    origin = previewUrl;
-  }
+  const appEnv = detectAppEnv();
+  const isProd = appEnv === 'prod';
+  const isPreview = appEnv === 'preview';
+  const origin = getAppOrigin();
 
   const enc = encodeURIComponent;
-  const scope = "atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create";
+  const scope = "atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create repo:com.suibari.nagi.post?action=create";
   const redirectUri = `${origin}/`; // We use root as redirect
 
   let client_id = "";
   if (isProd) {
-    client_id = `${publicUrl}/client-metadata.json`;
+    client_id = `${APP_URL}/client-metadata.json`;
   } else if (isPreview) {
-    client_id = `${previewUrl}/client-metadata-preview.json`;
+    client_id = `${PREVIEW_URL}/client-metadata-preview.json`;
   } else {
     // Special loopback client ID format for local dev
     // Note: redirect_uri must match exactly what is in redirect_uris

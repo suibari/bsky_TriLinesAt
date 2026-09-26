@@ -14,6 +14,10 @@ export interface TriLinesEntry {
     uri: string;
     cid: string;
   };
+  sharedNagiPost?: {
+    uri: string;
+    cid: string;
+  };
   authorDid: string;
   hubRef?: string; // DID of the "Hub" for global feed aggregation
 }
@@ -29,6 +33,7 @@ export interface TriLinesLike {
 export const IDS = {
   TriLinesEntry: 'blue.trilinesat.diary',
   TriLinesLike: 'blue.trilinesat.like',
+  NagiPost: 'com.suibari.nagi.post',
 };
 
 // UI View Type (extends PDS record with transient state)

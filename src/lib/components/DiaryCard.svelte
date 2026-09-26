@@ -10,6 +10,7 @@
   import { t } from "$lib/i18n";
   import { Agent } from "@atproto/api";
   import { userBadges } from "$lib/stores/badges";
+  import { NAGI_URL } from "$lib/config";
 
   const dispatch = createEventDispatcher();
 
@@ -21,6 +22,10 @@
   $: postLink =
     entry.sharedPost && author
       ? `https://bsky.app/profile/${author.did}/post/${entry.sharedPost.uri.split("/").pop()}`
+      : "#";
+  $: nagiPostLink =
+    entry.sharedNagiPost && author
+      ? `${NAGI_URL}/thread/${author.did}/${entry.sharedNagiPost.uri.split("/").pop()}`
       : "#";
 
   // Format date
@@ -261,6 +266,18 @@
         on:click|stopPropagation
       >
         <ExternalLink size={16} />
+      </a>
+    {/if}
+    {#if entry.sharedNagiPost}
+      <a
+        href={nagiPostLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-slate-500 hover:text-white text-xs font-bold leading-4"
+        title={$t("card.view_on_nagi")}
+        on:click|stopPropagation
+      >
+        Nagi
       </a>
     {/if}
   </div>
