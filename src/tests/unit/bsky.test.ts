@@ -436,6 +436,19 @@ describe('bsky utils', () => {
       expect(putCall.record.sharedNagiPost).toBeUndefined();
       expect(result.shareErrors).toEqual(['nagi']);
     });
+
+    it('日記への投稿参照の保存に失敗した場合、linkErrorが返ること', async () => {
+      mockCreateRecord.mockImplementation(async ({ collection }: any) => ({
+        data: { uri: `at://did:self/${collection}/rkey123`, cid: 'cid' }
+      }));
+      mockPutRecord.mockRejectedValueOnce(new Error('InvalidSwap'));
+
+      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: true, nagi: true });
+
+      expect(mockPutRecord).toHaveBeenCalledTimes(1);
+      expect(result.shareErrors).toEqual([]);
+      expect(result.linkError).toBe(true);
+    });
   });
 
   // 変更前の実装と送信内容が完全一致することを固定する特性テスト。

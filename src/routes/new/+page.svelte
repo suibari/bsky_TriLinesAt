@@ -150,18 +150,18 @@
     submitting = true;
 
     try {
-      const { shareErrors } = await createDiary(
+      const { shareErrors, linkError } = await createDiary(
         lines.map((l) => ({ text: l.text, image: l.image })),
         { bluesky: shareToBluesky, nagi: shareToNagi },
       );
 
       // The diary itself is saved; only report which crossposts failed
-      if (shareErrors.length > 0) {
-        alert(
-          shareErrors
-            .map((target) => $t(`share.error_${target}` as any))
-            .join("\n"),
-        );
+      const shareMessages = shareErrors.map((target) =>
+        $t(`share.error_${target}` as any),
+      );
+      if (linkError) shareMessages.push($t("share.error_link"));
+      if (shareMessages.length > 0) {
+        alert(shareMessages.join("\n"));
       }
 
       // Clear draft on success
@@ -332,6 +332,7 @@
           <input
             type="checkbox"
             bind:checked={shareToBluesky}
+            aria-label={$t("editor.share_bluesky")}
             class="sr-only peer"
           />
           <div
@@ -348,6 +349,7 @@
           <input
             type="checkbox"
             bind:checked={shareToNagi}
+            aria-label={$t("editor.share_nagi")}
             class="sr-only peer"
           />
           <div

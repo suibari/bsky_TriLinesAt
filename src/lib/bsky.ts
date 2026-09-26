@@ -191,8 +191,9 @@ export async function createDiary(
   if (!rkey) throw new Error("Failed to generate rkey");
 
   const shareErrors: ShareTarget[] = [];
+  let linkError = false;
   if (!share.bluesky && !share.nagi) {
-    return { entry: entryData, shareErrors };
+    return { entry: entryData, shareErrors, linkError };
   }
 
   // 3. Share to Bluesky / Nagi if requested (independently; one failing doesn't block the other)
@@ -203,7 +204,7 @@ export async function createDiary(
     console.warn("Failed to build share text", e);
     if (share.bluesky) shareErrors.push('bluesky');
     if (share.nagi) shareErrors.push('nagi');
-    return { entry: entryData, shareErrors };
+    return { entry: entryData, shareErrors, linkError };
   }
   const langs = [get(locale)];
   const images = embedImages.slice(0, 4);
@@ -260,10 +261,11 @@ export async function createDiary(
     } catch (e) {
       // Posts exist but the entry won't link to them. Not fatal for the diary itself.
       console.warn("Failed to update record with shared post refs", e);
+      linkError = true;
     }
   }
 
-  return { entry: entryData, shareErrors };
+  return { entry: entryData, shareErrors, linkError };
 }
 
 export async function deleteRecord(uri: string) {
