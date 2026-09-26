@@ -13,6 +13,7 @@
   import { goto } from "$app/navigation";
   import { t, locale } from "$lib/i18n"; // Import locale
   import { settings } from "$lib/stores/settings";
+  import { NAGI_URL } from "$lib/config";
   import { getRandomPlaceholders } from "$lib/constants/placeholders";
 
   import { onMount } from "svelte";
@@ -342,8 +343,12 @@
       </div>
 
       <div class="flex items-center justify-between">
-        <span class="text-sm font-medium text-slate-300"
-          >{$t("editor.share_nagi")}</span
+        <a
+          href={`${NAGI_URL}/about`}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-sm font-medium text-slate-300 underline underline-offset-4 hover:text-white"
+          >{$t("editor.share_nagi")}</a
         >
         <label class="relative inline-flex items-center cursor-pointer">
           <input
