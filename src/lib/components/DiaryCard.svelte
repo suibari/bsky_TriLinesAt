@@ -44,6 +44,8 @@
   let likeLoading = false;
   // Viewer already counted via a like on the shared Bluesky/Nagi post
   let viewerSharedLike = false;
+  // Heart is filled if the viewer is counted by either a TriLines or a shared-post like
+  $: likedDisplay = liked || viewerSharedLike;
 
   async function loadLikes() {
     // If passed via props, use it
@@ -288,13 +290,13 @@
   <!-- Actions -->
   <div class="flex items-center gap-4 pt-2 border-t border-white/5 h-10">
     <button
-      class="flex items-center gap-2 text-sm font-medium transition-colors {liked
+      class="flex items-center gap-2 text-sm font-medium transition-colors {likedDisplay
         ? 'text-pink-500'
         : 'text-slate-400 hover:text-pink-400'}"
       on:click={toggleLike}
       disabled={likeLoading}
     >
-      <Heart class={liked ? "fill-current" : ""} size={18} />
+      <Heart class={likedDisplay ? "fill-current" : ""} size={18} />
       <span>{likes}</span>
     </button>
 

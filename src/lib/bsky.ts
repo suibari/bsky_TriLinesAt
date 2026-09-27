@@ -675,23 +675,35 @@ export async function getEntryLikes(uri: string) {
   // Use Constellation to find likes
   // links?target={uri}&collection={collection}&path={path}
   const endpoint = 'https://constellation.microcosm.blue/links';
-  const url = new URL(endpoint);
-  url.searchParams.set('target', uri);
-  url.searchParams.set('collection', IDS.TriLinesLike);
-  url.searchParams.set('path', '.subject.uri');
-  url.searchParams.set('limit', '100');
+  const links: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const url = new URL(endpoint);
+    url.searchParams.set('target', uri);
+    url.searchParams.set('collection', IDS.TriLinesLike);
+    url.searchParams.set('path', '.subject.uri');
+    url.searchParams.set('limit', '100');
+    if (cursor) url.searchParams.set('cursor', cursor);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    console.warn("Constellation fetch failed", res.status);
-    return [];
-  }
-  const data = await res.json();
-  // Constellation /links endpoint typically returns an array of links.
-  // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
-  // We handle both for robustness.
-  if (Array.isArray(data)) return data;
-  return data.linking_records || (data as any).links || [];
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      console.warn("Constellation fetch failed", res.status);
+      break;
+    }
+    const data = await res.json();
+    // Constellation /links endpoint typically returns an array of links.
+    // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
+    // We handle both for robustness.
+    if (Array.isArray(data)) return [...links, ...data];
+    links.push(...(data.linking_records || (data as any).links || []));
+    cursor = data.cursor || undefined;
+  } while (cursor);
+  return links;
+}
+
+// Author DID of a Constellation link, which may be nested under `value`
+function linkAuthorDid(l: any): string | undefined {
+  return l.author || l.did || l.value?.author || l.value?.did;
 }
 
 export function getBlobUrl(did: string, blob: BlobRef, type: 'fullsize' | 'thumbnail' = 'fullsize'): string {
@@ -777,7 +789,7 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
       getEntryLikes(entry.uri),
       getSharedPostLikerDids(entry),
     ]);
-    const trilinesLikerDids = links.map((l: any) => l.author || l.did).filter(Boolean) as string[];
+    const trilinesLikerDids = links.map(linkAuthorDid).filter(Boolean) as string[];
     // Same DID liking on multiple services counts as one
     const likerDids = Array.from(new Set([...trilinesLikerDids, ...sharedLikerDids]));
     const likeCount = likerDids.length;
@@ -787,10 +799,7 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
     let candidateDids: string[] = [];
 
     if (viewerDid) {
-      const myLike = links.find((l: any) => {
-        const authorDid = l.author || l.did || (l.value && l.value.author) || (l.value && l.value.did);
-        return authorDid === viewerDid;
-      });
+      const myLike = links.find((l: any) => linkAuthorDid(l) === viewerDid);
 
       if (myLike) {
         if (myLike.uri) {

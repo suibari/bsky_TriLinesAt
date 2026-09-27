@@ -362,6 +362,23 @@ describe('bsky utils', () => {
 
       expect(result.likeCount).toBe(2);
     });
+
+    it('TriLinesのいいね取得をページングし、value配下のDIDも数えること', async () => {
+      const entry = { uri: 'at://did:author/blue.trilinesat.diary/rkey' };
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        return u.searchParams.get('cursor')
+          ? { ok: true, json: async () => ({ linking_records: [{ did: 'did:self', collection: 'blue.trilinesat.like', rkey: 'l2' }], cursor: null }) }
+          : { ok: true, json: async () => ({ linking_records: [{ value: { did: 'did:nested' } }], cursor: 'next' }) };
+      });
+
+      const result = await getPostInteractionState(entry as any, 'did:self', true);
+
+      expect(result.likeCount).toBe(2);
+      expect(result.candidateDids).toEqual(['did:nested', 'did:self']);
+      expect(result.viewerLike).toBe('at://did:self/blue.trilinesat.like/l2');
+    });
   });
 
   describe('uploadImage', () => {
