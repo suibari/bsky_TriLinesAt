@@ -675,22 +675,35 @@ export async function getEntryLikes(uri: string) {
   // Use Constellation to find likes
   // links?target={uri}&collection={collection}&path={path}
   const endpoint = 'https://constellation.microcosm.blue/links';
-  const url = new URL(endpoint);
-  url.searchParams.set('target', uri);
-  url.searchParams.set('collection', IDS.TriLinesLike);
-  url.searchParams.set('path', '.subject.uri');
+  const links: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const url = new URL(endpoint);
+    url.searchParams.set('target', uri);
+    url.searchParams.set('collection', IDS.TriLinesLike);
+    url.searchParams.set('path', '.subject.uri');
+    url.searchParams.set('limit', '100');
+    if (cursor) url.searchParams.set('cursor', cursor);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    console.warn("Constellation fetch failed", res.status);
-    return [];
-  }
-  const data = await res.json();
-  // Constellation /links endpoint typically returns an array of links.
-  // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
-  // We handle both for robustness.
-  if (Array.isArray(data)) return data;
-  return data.linking_records || (data as any).links || [];
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      console.warn("Constellation fetch failed", res.status);
+      break;
+    }
+    const data = await res.json();
+    // Constellation /links endpoint typically returns an array of links.
+    // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
+    // We handle both for robustness.
+    if (Array.isArray(data)) return [...links, ...data];
+    links.push(...(data.linking_records || (data as any).links || []));
+    cursor = data.cursor || undefined;
+  } while (cursor);
+  return links;
+}
+
+// Author DID of a Constellation link, which may be nested under `value`
+function linkAuthorDid(l: any): string | undefined {
+  return l.author || l.did || l.value?.author || l.value?.did;
 }
 
 export function getBlobUrl(did: string, blob: BlobRef, type: 'fullsize' | 'thumbnail' = 'fullsize'): string {
@@ -732,19 +745,61 @@ export async function deleteAllData(did: string) {
   }
 }
 
+// Collect every DID linking to `target` via Constellation (paginated, de-duplicated server side)
+async function getLinkingDids(target: string, collection: string, path: string): Promise<string[]> {
+  const endpoint = 'https://constellation.microcosm.blue/links/distinct-dids';
+  const dids: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const url = new URL(endpoint);
+    url.searchParams.set('target', target);
+    url.searchParams.set('collection', collection);
+    url.searchParams.set('path', path);
+    url.searchParams.set('limit', '100');
+    if (cursor) url.searchParams.set('cursor', cursor);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      console.warn("Constellation fetch failed", res.status);
+      break;
+    }
+    const data = await res.json();
+    dids.push(...(data.linking_dids || []));
+    cursor = data.cursor || undefined;
+  } while (cursor);
+  return dids;
+}
+
+// Likes on the crossposted Bluesky post and reactions on the crossposted Nagi post
+export async function getSharedPostLikerDids(entry: TriLinesEntry): Promise<string[]> {
+  const [bskyDids, nagiDids] = await Promise.all([
+    entry.sharedPost?.uri
+      ? getLinkingDids(entry.sharedPost.uri, 'app.bsky.feed.like', '.subject.uri').catch(() => [])
+      : [],
+    entry.sharedNagiPost?.uri
+      ? getLinkingDids(entry.sharedNagiPost.uri, IDS.NagiReaction, '.subject.uri').catch(() => [])
+      : [],
+  ]);
+  return [...bskyDids, ...nagiDids];
+}
+
 export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: string, skipAvatarFetch = false) {
   try {
-    const links = await getEntryLikes(entry.uri);
-    const likeCount = links.length;
+    const [links, sharedLikerDids] = await Promise.all([
+      getEntryLikes(entry.uri),
+      getSharedPostLikerDids(entry),
+    ]);
+    const trilinesLikerDids = links.map(linkAuthorDid).filter(Boolean) as string[];
+    // Same DID liking on multiple services counts as one
+    const likerDids = Array.from(new Set([...trilinesLikerDids, ...sharedLikerDids]));
+    const likeCount = likerDids.length;
+    const viewerSharedLike = !!viewerDid && sharedLikerDids.includes(viewerDid);
     let viewerLikeUri: string | undefined;
     let avatars: any[] = [];
     let candidateDids: string[] = [];
 
     if (viewerDid) {
-      const myLike = links.find((l: any) => {
-        const authorDid = l.author || l.did || (l.value && l.value.author) || (l.value && l.value.did);
-        return authorDid === viewerDid;
-      });
+      const myLike = links.find((l: any) => linkAuthorDid(l) === viewerDid);
 
       if (myLike) {
         if (myLike.uri) {
@@ -761,12 +816,9 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
     }
 
     // Get candidate DIDs (limit 5)
-    // We only fetch if we have DIDs and they aren't fully resolved in links
-    candidateDids = Array.from(new Set(links.map((l: any) => l.author || l.did).filter(Boolean))).slice(0, 5) as string[];
+    candidateDids = likerDids.slice(0, 5);
 
     if (!skipAvatarFetch && candidateDids.length > 0) {
-      // Small optimization: If we already have these profiles in a global cache, use them?
-      // For now, simple fetch.
       try {
         const publicAgent = new Agent("https://public.api.bsky.app");
         const { data } = await publicAgent.app.bsky.actor.getProfiles({
@@ -781,12 +833,13 @@ export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: 
     return {
       likeCount,
       viewerLike: viewerLikeUri,
+      viewerSharedLike,
       likeAvatars: avatars,
       candidateDids // Used for batch fetching
     };
 
   } catch (e) {
     console.warn(`Failed to fetch interactions for ${entry.uri}`, e);
-    return { likeCount: 0, viewerLike: undefined, likeAvatars: [], candidateDids: [] };
+    return { likeCount: 0, viewerLike: undefined, viewerSharedLike: false, likeAvatars: [], candidateDids: [] };
   }
 }

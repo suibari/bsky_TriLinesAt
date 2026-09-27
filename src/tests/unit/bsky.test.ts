@@ -311,6 +311,74 @@ describe('bsky utils', () => {
       expect(result.likeCount).toBe(2);
       expect(result.viewerLike).toBe('at://did:self/like/1');
     });
+
+    it('Bsky/Nagiの共有投稿へのいいねを合算し、同じDIDは1つとして数えること', async () => {
+      const entry = {
+        uri: 'at://did:author/blue.trilinesat.diary/rkey',
+        sharedPost: { uri: 'at://did:author/app.bsky.feed.post/bsky', cid: 'c1' },
+        sharedNagiPost: { uri: 'at://did:author/com.suibari.nagi.post/nagi', cid: 'c2' },
+      };
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        const collection = u.searchParams.get('collection');
+        if (collection === 'blue.trilinesat.like') {
+          return { ok: true, json: async () => ({ linking_records: [{ did: 'did:a', collection, rkey: 'l1' }] }) };
+        }
+        if (collection === 'app.bsky.feed.like') {
+          return { ok: true, json: async () => ({ linking_dids: ['did:a', 'did:b', 'did:self'], cursor: null }) };
+        }
+        if (collection === 'com.suibari.nagi.reaction') {
+          return { ok: true, json: async () => ({ linking_dids: ['did:b', 'did:c'], cursor: null }) };
+        }
+        return { ok: false, json: async () => ({}) };
+      });
+
+      const result = await getPostInteractionState(entry as any, 'did:self', true);
+
+      expect(result.likeCount).toBe(4); // did:a, did:b, did:self, did:c
+      expect(result.viewerLike).toBeUndefined();
+      expect(result.viewerSharedLike).toBe(true);
+      expect(result.candidateDids).toEqual(['did:a', 'did:b', 'did:self', 'did:c']);
+    });
+
+    it('共有投稿へのいいね取得をページングして全件集めること', async () => {
+      const entry = {
+        uri: 'at://did:author/blue.trilinesat.diary/rkey',
+        sharedPost: { uri: 'at://did:author/app.bsky.feed.post/bsky', cid: 'c1' },
+      };
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        if (u.searchParams.get('collection') !== 'app.bsky.feed.like') {
+          return { ok: true, json: async () => ({ linking_records: [] }) };
+        }
+        return u.searchParams.get('cursor')
+          ? { ok: true, json: async () => ({ linking_dids: ['did:y'], cursor: null }) }
+          : { ok: true, json: async () => ({ linking_dids: ['did:x'], cursor: 'next' }) };
+      });
+
+      const result = await getPostInteractionState(entry as any, undefined, true);
+
+      expect(result.likeCount).toBe(2);
+    });
+
+    it('TriLinesのいいね取得をページングし、value配下のDIDも数えること', async () => {
+      const entry = { uri: 'at://did:author/blue.trilinesat.diary/rkey' };
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        return u.searchParams.get('cursor')
+          ? { ok: true, json: async () => ({ linking_records: [{ did: 'did:self', collection: 'blue.trilinesat.like', rkey: 'l2' }], cursor: null }) }
+          : { ok: true, json: async () => ({ linking_records: [{ value: { did: 'did:nested' } }], cursor: 'next' }) };
+      });
+
+      const result = await getPostInteractionState(entry as any, 'did:self', true);
+
+      expect(result.likeCount).toBe(2);
+      expect(result.candidateDids).toEqual(['did:nested', 'did:self']);
+      expect(result.viewerLike).toBe('at://did:self/blue.trilinesat.like/l2');
+    });
   });
 
   describe('uploadImage', () => {

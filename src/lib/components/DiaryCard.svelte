@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { IDS, type TriLinesEntry, type TriLinesEntryView } from "$lib/types";
-  import { getBlobUrl, likeEntry, unlikeEntry, getEntryLikes } from "$lib/bsky";
+  import type { TriLinesEntry, TriLinesEntryView } from "$lib/types";
+  import { getBlobUrl, likeEntry, unlikeEntry, getPostInteractionState } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import { session } from "$lib/auth/session";
   import { deleteRecord } from "$lib/bsky";
@@ -42,85 +42,34 @@
   let myLikeUri: string | undefined = undefined;
   let likeAvatars: any[] = [];
   let likeLoading = false;
+  // Viewer already counted via a like on the shared Bluesky/Nagi post
+  let viewerSharedLike = false;
+  // Heart is filled if the viewer is counted by either a TriLines or a shared-post like
+  $: likedDisplay = liked || viewerSharedLike;
 
   async function loadLikes() {
     // If passed via props, use it
     if (typeof entry.likeCount === "number") {
-      likes = entry.likeCount;
-      liked = !!entry.viewerLike;
-      myLikeUri = entry.viewerLike;
-      likeAvatars = entry.likeAvatars || [];
+      applyInteractions(entry);
       return;
     }
 
     // Fallback: Fetch if not provided (retaining standalone capability)
     if (!entry?.uri) return;
-    try {
-      const links = await getEntryLikes(entry.uri);
-      // links: [{ uri, cid, author, value: {...} }, ...]
-      likes = links.length;
+    applyInteractions(await getPostInteractionState(entry, $session.did ?? undefined));
+  }
 
-      // Distinct authors for avatars
-      // We might need to fetch profiles if 'author' is just a DID.
-      // Constellation usually returns 'author' as string DID.
-      // We'll need to fetch profiles or just show placeholders?
-      // For MVP, if author is DID, we can't show avatar easily without fetching.
-      // Does Constellation return expanded author? The docs say "author" is DID.
-      // We can try to match with session DID for 'liked' status.
-      // And fetch profiles for avatars? Or maybe we skip avatars for now if too heavy?
-      // User requested avatars. We can batch fetch profiles or just show a count?
-      // Let's assume we can fetch a few profiles.
-
-      const viewerDid = $session.did;
-      // Debug
-      // console.log("LoadLikes", { viewerDid, links });
-
-      const myLike = links.find((l: any) => {
-        const authorDid =
-          l.author ||
-          l.did ||
-          (l.value && l.value.author) ||
-          (l.value && l.value.did);
-        return authorDid === viewerDid;
-      });
-
-      if (myLike) {
-        liked = true;
-        // Robustly get or construct URI
-        if (myLike.uri) {
-          myLikeUri = myLike.uri;
-        } else {
-          // Constellation raw object fallback
-          const did = myLike.author || myLike.did;
-          const rkey = myLike.rkey;
-          const collection = myLike.collection || IDS.TriLinesLike;
-          if (did && rkey) {
-            myLikeUri = `at://${did}/${collection}/${rkey}`;
-          }
-        }
-      } else {
-        liked = false;
-        myLikeUri = undefined;
-      }
-
-      // Distinct authors for avatars
-      const uniqueDids = Array.from(
-        new Set(links.map((l: any) => l.author || l.did).filter(Boolean)),
-      ).slice(0, 5) as string[];
-      if (uniqueDids.length > 0) {
-        try {
-          const publicAgent = new Agent("https://public.api.bsky.app");
-          const { data } = await publicAgent.app.bsky.actor.getProfiles({
-            actors: uniqueDids,
-          });
-          likeAvatars = data.profiles;
-        } catch {
-          // fallback or ignore
-        }
-      }
-    } catch (e) {
-      console.warn("Error loading likes", e);
-    }
+  function applyInteractions(state: {
+    likeCount?: number;
+    viewerLike?: string;
+    viewerSharedLike?: boolean;
+    likeAvatars?: any[];
+  }) {
+    likes = state.likeCount ?? 0;
+    liked = !!state.viewerLike;
+    myLikeUri = state.viewerLike;
+    viewerSharedLike = !!state.viewerSharedLike;
+    likeAvatars = state.likeAvatars || [];
   }
 
   async function toggleLike(e: MouseEvent) {
@@ -139,9 +88,11 @@
         if (originalUri) {
           // Optimistic UI update: Remove like
           liked = false;
-          likes = Math.max(0, likes - 1);
           myLikeUri = undefined;
-          likeAvatars = likeAvatars.filter((p) => p.did !== $session.did);
+          if (!viewerSharedLike) {
+            likes = Math.max(0, likes - 1);
+            likeAvatars = likeAvatars.filter((p) => p.did !== $session.did);
+          }
 
           // Actual API call
           await unlikeEntry(originalUri);
@@ -155,7 +106,7 @@
         // Like Logic
         // Optimistic UI update: Add like
         liked = true;
-        likes++;
+        if (!viewerSharedLike) likes++;
 
         // Try to add self to avatars optimistically
         if ($session.did) {
@@ -339,13 +290,13 @@
   <!-- Actions -->
   <div class="flex items-center gap-4 pt-2 border-t border-white/5 h-10">
     <button
-      class="flex items-center gap-2 text-sm font-medium transition-colors {liked
+      class="flex items-center gap-2 text-sm font-medium transition-colors {likedDisplay
         ? 'text-pink-500'
         : 'text-slate-400 hover:text-pink-400'}"
       on:click={toggleLike}
       disabled={likeLoading}
     >
-      <Heart class={liked ? "fill-current" : ""} size={18} />
+      <Heart class={likedDisplay ? "fill-current" : ""} size={18} />
       <span>{likes}</span>
     </button>
 

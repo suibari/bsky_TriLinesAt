@@ -34,12 +34,14 @@ export const IDS = {
   TriLinesEntry: 'blue.trilinesat.diary',
   TriLinesLike: 'blue.trilinesat.like',
   NagiPost: 'com.suibari.nagi.post',
+  NagiReaction: 'com.suibari.nagi.reaction',
 };
 
 // UI View Type (extends PDS record with transient state)
 export interface TriLinesEntryView extends TriLinesEntry {
   likeCount?: number;
   viewerLike?: string; // URI if liked by viewer
+  viewerSharedLike?: boolean; // Viewer liked the crossposted Bluesky/Nagi post
   likeAvatars?: any[]; // ProfileView[]
   candidateDids?: string[]; // Temp list for batch fetching
 }
