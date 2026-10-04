@@ -9,7 +9,8 @@
   } from "$lib/bsky";
   import Button from "$lib/components/Button.svelte";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
-  import { Edit3, Compass, Users, Trophy, Loader2 } from "lucide-svelte";
+  import DiaryComposer from "$lib/components/DiaryComposer.svelte";
+  import { Compass, Users, Trophy, Loader2 } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import Avatar from "$lib/components/Avatar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
@@ -383,6 +384,8 @@
   let isSwiping = false;
 
   function handleTouchStart(e: TouchEvent) {
+    // Don't treat gestures inside the composer as tab swipes
+    if ((e.target as HTMLElement).closest("[data-no-swipe]")) return;
     touchStartX = e.changedTouches[0].screenX;
     touchStartY = e.changedTouches[0].screenY;
     isSwiping = true;
@@ -620,14 +623,8 @@
         </div>
       </header>
 
-      <!-- FAB (Floating Action Button) -->
-      <a href="/new" class="fixed bottom-6 right-6 z-50">
-        <button
-          class="w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30 flex items-center justify-center hover:scale-110 transition-transform"
-        >
-          <Edit3 size={24} />
-        </button>
-      </a>
+      <!-- Composer -->
+      <DiaryComposer compact />
 
       <!-- Tabs -->
       <div

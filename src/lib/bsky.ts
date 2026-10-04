@@ -291,6 +291,40 @@ export async function deleteRecord(uri: string) {
   });
 }
 
+// Rewrite the line texts of an own diary entry. Images and shared post refs are kept,
+// and the crossposted Bluesky/Nagi posts are intentionally left unchanged.
+export async function updateDiaryLines(uri: string, texts: string[]) {
+  const agent = getAgent();
+  const sessionDid = get(session).did;
+
+  if (!sessionDid) throw new Error("Not authenticated");
+
+  const parts = uri.split('/');
+  const rkey = parts.pop();
+  const collection = parts.pop();
+  const repo = parts.pop();
+
+  if (!repo || !collection || !rkey) throw new Error("Invalid URI");
+  if (repo !== sessionDid) throw new Error("Cannot edit other user's post");
+
+  const { data: current } = await agent.api.com.atproto.repo.getRecord({ repo, collection, rkey });
+  const record = current.value as any;
+  const lines: TriLinesLine[] = record.lines.map((line: TriLinesLine, i: number) => ({
+    ...line,
+    text: texts[i] ?? line.text,
+  }));
+
+  const { data } = await agent.api.com.atproto.repo.putRecord({
+    repo,
+    collection,
+    rkey,
+    record: { ...record, lines },
+    swapRecord: current.cid // fail instead of overwriting a concurrent change
+  });
+
+  return { cid: data.cid, lines };
+}
+
 // Helper to get PDS endpoint
 export async function getPds(did: string): Promise<string> {
   if (did.startsWith("did:plc:")) {
