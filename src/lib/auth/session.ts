@@ -16,7 +16,36 @@ export const session = writable<SessionState>({
   loading: true,
 });
 
+const MOCK_DID_KEY = 'dev_mock_did';
+
+// Dev only: act as `did` without OAuth so the signed-in UI can be checked locally.
+// Enable with `?mockDid=did:plc:...` (kept for the tab via sessionStorage), disable with `?mockDid=`.
+// The agent is unauthenticated, so reads work but writes (posting, likes) fail.
+async function initMockSession(): Promise<boolean> {
+  const param = new URLSearchParams(window.location.search).get('mockDid');
+  if (param !== null) {
+    if (param) sessionStorage.setItem(MOCK_DID_KEY, param);
+    else sessionStorage.removeItem(MOCK_DID_KEY);
+  }
+  const did = sessionStorage.getItem(MOCK_DID_KEY);
+  if (!did) return false;
+
+  const { getPds } = await import('$lib/bsky');
+  const agent = new Agent(await getPds(did));
+  console.warn(`[dev] Mock session as ${did} (read-only)`);
+  session.update(s => ({ ...s, agent, did, isAuthenticated: true, loading: false }));
+  return true;
+}
+
 export async function initSession() {
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    try {
+      if (await initMockSession()) return;
+    } catch (e) {
+      console.error('Mock session init error', e);
+    }
+  }
+
   try {
     const client = await createClient();
     const result = await client.init();
