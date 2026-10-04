@@ -100,6 +100,7 @@
       <DiaryCard
         {entry}
         {author}
+        editable
         on:delete={() => {
           goto("/");
         }}

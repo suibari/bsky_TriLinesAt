@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { TriLinesEntry, TriLinesEntryView } from "$lib/types";
-  import { getBlobUrl, likeEntry, unlikeEntry, getPostInteractionState } from "$lib/bsky";
+  import { getBlobUrl, likeEntry, unlikeEntry, getPostInteractionState, updateDiaryLines } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import { session } from "$lib/auth/session";
   import { deleteRecord } from "$lib/bsky";
   import { createEventDispatcher, onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Heart, Trash2, X } from "lucide-svelte";
+  import { Heart, Pencil, Trash2, X } from "lucide-svelte";
   import { t } from "$lib/i18n";
   import { Agent } from "@atproto/api";
   import { userBadges } from "$lib/stores/badges";
@@ -17,6 +17,39 @@
   export let entry: TriLinesEntryView;
   export let author: any;
   export let rkey: string | undefined = undefined; // passed if we know it
+  // Allow the owner to edit the line texts in place (entry page only)
+  export let editable = false;
+
+  const MAX_CHARS = 50;
+  let editing = false;
+  let saving = false;
+  let editTexts: string[] = [];
+
+  $: isOwner =
+    !!author && $session.isAuthenticated && $session.did === author.did;
+  $: canSave =
+    !saving &&
+    editTexts.every((text) => text.trim().length > 0) &&
+    editTexts.some((text, i) => text !== entry.lines[i]?.text);
+
+  function startEdit() {
+    editTexts = entry.lines.map((line) => line.text);
+    editing = true;
+  }
+
+  async function saveEdit() {
+    if (!canSave) return;
+    saving = true;
+    try {
+      const { cid, lines } = await updateDiaryLines(entry.uri, editTexts);
+      entry = { ...entry, cid, lines };
+      editing = false;
+    } catch (e) {
+      alert($t("card.edit_failed") + e);
+    } finally {
+      saving = false;
+    }
+  }
 
   // Determine post link
   $: postLink =
@@ -142,7 +175,7 @@
   }
 
   function handleCardClick() {
-    if (!author) return;
+    if (!author || editing) return;
     if (rkey) {
       goto(`/entry/${author.did}/${rkey}`);
     } else {
@@ -234,58 +267,107 @@
   </div>
 
   <!-- Diary Lines -->
-  <div class="space-y-4 py-2">
-    {#each entry.lines as line, i}
-      <div class="flex gap-4 items-start group">
-        <span
-          class="text-fuchsia-400 font-mono font-bold pt-1 opacity-50 select-none"
-          >0{i + 1}</span
-        >
-        <div class="flex-1 space-y-2 min-w-0 overflow-hidden">
-          <p
-            class="text-lg leading-relaxed text-slate-100 break-all w-full whitespace-pre-wrap"
-            style="overflow-wrap: anywhere;"
+  {#if editing}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="space-y-3 py-2" on:click|stopPropagation>
+      {#each editTexts as _, i}
+        <div class="flex gap-4 items-center">
+          <label
+            for="edit-line-{i}"
+            class="text-fuchsia-400 font-mono font-bold opacity-50 select-none"
+            >0{i + 1}</label
           >
-            {line.text}
-          </p>
-          {#if line.image}
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-            <div
-              class="relative overflow-hidden rounded-lg mt-2 max-w-sm bg-black/20 group-hover:ring-2 ring-white/10 transition-all cursor-zoom-in"
-              on:click={(e) => {
-                e.stopPropagation();
-                openLightbox(
-                  getBlobUrl(author?.did || entry.authorDid, line.image!),
-                );
-              }}
-              role="button"
-              tabindex="0"
-              on:keydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+          <input
+            id="edit-line-{i}"
+            type="text"
+            bind:value={editTexts[i]}
+            maxlength={MAX_CHARS}
+            class="flex-1 min-w-0 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 ring-violet-500/50"
+          />
+          <span
+            class="text-[10px] font-mono shrink-0 {editTexts[i].length >= MAX_CHARS
+              ? 'text-red-400'
+              : 'text-slate-600'}"
+          >
+            {editTexts[i].length}/{MAX_CHARS}
+          </span>
+        </div>
+      {/each}
+      {#if entry.sharedPost || entry.sharedNagiPost}
+        <p class="text-xs text-slate-500">{$t("card.edit_shared_note")}</p>
+      {/if}
+      <div class="flex justify-end gap-2">
+        <button
+          class="px-4 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white transition-colors"
+          on:click={() => (editing = false)}
+          disabled={saving}
+        >
+          {$t("editor.cancel")}
+        </button>
+        <button
+          class="px-4 py-1.5 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 transition-all"
+          on:click={saveEdit}
+          disabled={!canSave}
+        >
+          {saving ? $t("card.saving") : $t("card.save")}
+        </button>
+      </div>
+    </div>
+  {:else}
+    <div class="space-y-4 py-2">
+      {#each entry.lines as line, i}
+        <div class="flex gap-4 items-start group">
+          <span
+            class="text-fuchsia-400 font-mono font-bold pt-1 opacity-50 select-none"
+            >0{i + 1}</span
+          >
+          <div class="flex-1 space-y-2 min-w-0 overflow-hidden">
+            <p
+              class="text-lg leading-relaxed text-slate-100 break-all w-full whitespace-pre-wrap"
+              style="overflow-wrap: anywhere;"
+            >
+              {line.text}
+            </p>
+            {#if line.image}
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+              <div
+                class="relative overflow-hidden rounded-lg mt-2 max-w-sm bg-black/20 group-hover:ring-2 ring-white/10 transition-all cursor-zoom-in"
+                on:click={(e) => {
                   e.stopPropagation();
                   openLightbox(
                     getBlobUrl(author?.did || entry.authorDid, line.image!),
                   );
-                }
-              }}
-            >
-              <img
-                src={getBlobUrl(
-                  author?.did || entry.authorDid,
-                  line.image!,
-                  "thumbnail",
-                )}
-                alt="Entry attachment"
-                class="w-full h-auto max-h-64 object-cover transform hover:scale-105 transition-transform duration-500"
-                loading="lazy"
-              />
-            </div>
-          {/if}
+                }}
+                role="button"
+                tabindex="0"
+                on:keydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    openLightbox(
+                      getBlobUrl(author?.did || entry.authorDid, line.image!),
+                    );
+                  }
+                }}
+              >
+                <img
+                  src={getBlobUrl(
+                    author?.did || entry.authorDid,
+                    line.image!,
+                    "thumbnail",
+                  )}
+                  alt="Entry attachment"
+                  class="w-full h-auto max-h-64 object-cover transform hover:scale-105 transition-transform duration-500"
+                  loading="lazy"
+                />
+              </div>
+            {/if}
+          </div>
         </div>
-      </div>
-    {/each}
-  </div>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Actions -->
   <div class="flex items-center gap-4 pt-2 border-t border-white/5 h-10">
@@ -332,9 +414,18 @@
       </div>
     {/if}
 
-    {#if author && $session.isAuthenticated && $session.did === author.did}
+    {#if isOwner}
+      {#if editable && !editing}
+        <button
+          class="ml-auto text-slate-400 hover:text-white transition-colors"
+          on:click|stopPropagation={startEdit}
+          title={$t("card.edit")}
+        >
+          <Pencil size={18} />
+        </button>
+      {/if}
       <button
-        class="ml-auto text-slate-400 hover:text-red-500 transition-colors"
+        class="{editable && !editing ? '' : 'ml-auto'} text-slate-400 hover:text-red-500 transition-colors"
         on:click={handleDelete}
         title={$t("card.delete")}
       >
