@@ -6,7 +6,7 @@
   import { deleteRecord } from "$lib/bsky";
   import { createEventDispatcher, onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { Heart, ExternalLink, Trash2, X } from "lucide-svelte";
+  import { Heart, Trash2, X } from "lucide-svelte";
   import { t } from "$lib/i18n";
   import { Agent } from "@atproto/api";
   import { userBadges } from "$lib/stores/badges";
@@ -212,11 +212,11 @@
         href={postLink}
         target="_blank"
         rel="noopener noreferrer"
-        class="text-slate-500 hover:text-white"
+        class="text-slate-500 hover:text-white text-xs font-bold leading-4"
         title={$t("card.view_on_bsky")}
         on:click|stopPropagation
       >
-        <ExternalLink size={16} />
+        Bluesky
       </a>
     {/if}
     {#if entry.sharedNagiPost}
