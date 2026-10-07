@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getDiaryDate, getDiaryDateKey, formatDateKey } from "$lib/diaryDate";
   import { createDiary, getEntries } from "$lib/bsky";
   import { session } from "$lib/auth/session";
   import Button from "$lib/components/Button.svelte";
@@ -164,41 +165,14 @@
         localStorage.removeItem("diary_draft");
       }
 
-      // Calculate post-success stats (Optimistic)
-      let newStreak = currentStreak;
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
-      // Logic:
-      // If we already had a post today (lastPostDate === today), streak doesn't increase.
-      // If last post was yesterday, streak increments.
-      // If last post was older or null (0), streak becomes 1.
-
-      // Parse lastPostDate to YYYY-MM-DD
-      let lastDateYMD = "";
-      if (lastPostDate) {
-        const d = new Date(lastPostDate);
-        lastDateYMD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      }
-
-      const yesterday = new Date();
+      // Ranking supplies lastPostDate as an already normalized diary date key.
+      const today = getDiaryDateKey();
+      const yesterday = getDiaryDate();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayYMD = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
-
-      // Wait calculateRankings typically handles timezone, but let's be approximate/robust.
-      // If currentStreak > 0, it means it's active (today/yesterday).
-      if (currentStreak > 0) {
-        if (lastDateYMD === today) {
-          // Already posted today, no change
-          newStreak = currentStreak;
-        } else {
-          // Since it's active (>0), it must be yesterday (or earlier today?)
-          // Simple increment
-          newStreak = currentStreak + 1;
-        }
-      } else {
-        // Streak was broken or 0
-        newStreak = 1;
-      }
+      const lastDateYMD = lastPostDate ?? "";
+      const newStreak =
+        lastDateYMD === today ? Math.max(1, currentStreak) :
+        lastDateYMD === formatDateKey(yesterday) ? currentStreak + 1 : 1;
 
       const isFirst = totalCount === 0;
 

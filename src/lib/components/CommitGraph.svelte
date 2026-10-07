@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getDiaryDate } from "$lib/diaryDate";
   import { t } from "$lib/i18n";
   import { fade, scale } from "svelte/transition";
   import { Loader2 } from "lucide-svelte";
@@ -7,7 +8,7 @@
   export let loading = false;
 
   // State
-  let currentDate = new Date();
+  let currentDate = getDiaryDate();
   let hoveredDay: {
     day: number;
     entry: any;
@@ -30,12 +31,10 @@
   $: allCells = [...paddingDays, ...days];
 
   // Map entries to days
-  // Ensure we match local date, but entries are UTC ISO strings.
-  // We should probably show entries based on user's local time or the entry's date.
-  // For simplicity and consistency with DiaryCard, we use the local date representation.
+  // Use the same local-noon cutoff as diary cards and rankings.
   $: entriesByDay = entries.reduce(
     (acc, entry) => {
-      const d = new Date(entry.createdAt);
+      const d = getDiaryDate(entry.createdAt);
       // Check if entry belongs to currently displayed month/year
       if (d.getFullYear() === year && d.getMonth() === month) {
         const day = d.getDate();
@@ -186,7 +185,7 @@
       out:fade={{ duration: 150 }}
     >
       <div class="text-xs text-slate-400 mb-1 border-b border-white/10 pb-1">
-        {new Date(hoveredDay.entry.createdAt).toLocaleDateString()}
+        {getDiaryDate(hoveredDay.entry.createdAt).toLocaleDateString()}
       </div>
       <div class="text-sm overflow-hidden text-ellipsis">
         {#each hoveredDay.entry.lines as line}
