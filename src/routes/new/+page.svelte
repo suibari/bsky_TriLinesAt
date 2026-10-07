@@ -36,5 +36,6 @@
     <div class="w-8"></div>
   </header>
 
+  <p class="relative z-10 mb-4 text-sm text-slate-400">{$t("editor.day_cutoff")}</p>
   <DiaryComposer bind:entries={myEntries} />
 </div>

@@ -1,3 +1,4 @@
+import { getDiaryDate, getDiaryDateKey, formatDateKey } from "./diaryDate";
 import type { TriLinesEntry } from './types';
 
 export interface RankingItem {
@@ -16,12 +17,6 @@ export interface Rankings {
   badges: Record<string, string>;
 }
 
-// Helper to format date as YYYY-MM-DD in local time
-function getDid(dateStr: string): string {
-  const d = new Date(dateStr);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function assignRanks(items: RankingItem[]) {
   for (let i = 0; i < items.length; i++) {
     if (i > 0 && items[i].count === items[i - 1].count) {
@@ -34,13 +29,13 @@ function assignRanks(items: RankingItem[]) {
 
 export function calculateRankings(entries: TriLinesEntry[]): Rankings {
   const users: Record<string, TriLinesEntry[]> = {};
-  const now = new Date();
+  const now = getDiaryDate();
 
   // Normalize Today/Yesterday strings
-  const todayStr = getDid(now.toISOString());
+  const todayStr = getDiaryDateKey(now.toISOString());
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = getDid(yesterday.toISOString());
+  const yesterdayStr = getDiaryDateKey(yesterday.toISOString());
 
   // 1. Weekly Start (Monday of current week)
   // getDay(): 0 = Sun, 1 = Mon ... 6 = Sat
@@ -54,8 +49,8 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   // 3. Rookie Cutoff (5 days ago)
-  const fiveDaysAgo = new Date(now);
-  fiveDaysAgo.setDate(now.getDate() - 5);
+  const fiveDaysAgo = new Date();
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
 
   // Group by user
@@ -83,7 +78,7 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
     const lastPostDate = userEntries[userEntries.length - 1].createdAt;
 
     const uniqueDates = Array.from(new Set(
-      userEntries.map(e => getDid(e.createdAt))
+      userEntries.map(e => getDiaryDateKey(e.createdAt))
     )).sort().reverse(); // Descending YYYY-MM-DD for Streak/Total
 
     // --- Existing Total & Streak (Keep for backward compat or if needed) ---
@@ -168,8 +163,8 @@ export function calculateRankings(entries: TriLinesEntry[]): Rankings {
     }
 
     // Helper for string comparison
-    const startOfWeekStr = getDid(startOfWeek.toISOString());
-    const startOfMonthStr = getDid(startOfMonth.toISOString());
+    const startOfWeekStr = formatDateKey(startOfWeek);
+    const startOfMonthStr = formatDateKey(startOfMonth);
 
     // 2. Weekly: Count unique dates >= startOfWeek
     const weeklyCount = uniqueDates.filter(d => d >= startOfWeekStr).length;

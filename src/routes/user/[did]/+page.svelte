@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getDiaryDate } from "$lib/diaryDate";
   import { page } from "$app/stores";
   import { getEntries, getPostInteractionState } from "$lib/bsky";
   import { session, initSession } from "$lib/auth/session";
@@ -158,7 +159,7 @@
   }
 
   function getDateHeader(isoString: string) {
-    const d = new Date(isoString);
+    const d = getDiaryDate(isoString);
     return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   }
 </script>

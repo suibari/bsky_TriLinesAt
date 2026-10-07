@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getDiaryDate } from "$lib/diaryDate";
   import { onMount } from "svelte";
   import { session, initSession, signIn } from "$lib/auth/session";
   import {
@@ -409,7 +410,7 @@
   }
 
   function getDateHeader(isoString: string) {
-    const d = new Date(isoString);
+    const d = getDiaryDate(isoString);
     return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   }
 

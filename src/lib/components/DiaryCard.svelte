@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getDiaryDate } from "$lib/diaryDate";
   import type { TriLinesEntry, TriLinesEntryView } from "$lib/types";
   import { getBlobUrl, likeEntry, unlikeEntry, getPostInteractionState, updateDiaryLines } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
@@ -62,11 +63,9 @@
       : "#";
 
   // Format date
-  $: date = new Date(entry.createdAt).toLocaleDateString(undefined, {
+  $: date = getDiaryDate(entry.createdAt).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 
   // Like Logic
