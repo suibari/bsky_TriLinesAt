@@ -235,6 +235,7 @@
         <input
           id="line-{i}"
           type="text"
+          autocomplete="off"
           bind:value={line.text}
           maxlength={MAX_CHARS}
           placeholder={placeholders[i] || $t("editor.placeholder")}
@@ -345,6 +346,7 @@
 
       <textarea
         id="line-{i}"
+        autocomplete="off"
         bind:value={line.text}
         maxlength={MAX_CHARS}
         placeholder={placeholders[i] || $t("editor.placeholder")}
