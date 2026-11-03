@@ -34,6 +34,7 @@
   $: placeholders = getRandomPlaceholders(3, $locale);
 
   let shareToBluesky = false; // Default OFF (safer side)
+  let shareToNagi = false; // Default OFF: Nagi shows the diary only when opted in
   let rememberSettings = false;
   let submitting = false;
   let isLoaded = false;
@@ -53,6 +54,7 @@
       if (storedRemember) {
         shareToBluesky =
           localStorage.getItem("settings.shareToBluesky") === "true";
+        shareToNagi = localStorage.getItem("settings.shareToNagi") === "true";
       }
 
       // Load draft
@@ -97,8 +99,10 @@
     localStorage.setItem("settings.rememberShare", String(rememberSettings));
     if (rememberSettings) {
       localStorage.setItem("settings.shareToBluesky", String(shareToBluesky));
+      localStorage.setItem("settings.shareToNagi", String(shareToNagi));
     } else {
       localStorage.removeItem("settings.shareToBluesky");
+      localStorage.removeItem("settings.shareToNagi");
     }
 
     // Save Draft (Debouncing logic is natural via Svelte reactive block, but strictly it saves on every keystroke.
@@ -144,7 +148,7 @@
     try {
       const { shareErrors, linkError } = await createDiary(
         lines.map((l) => ({ text: l.text, image: l.image, alt: l.alt })),
-        { bluesky: shareToBluesky },
+        { bluesky: shareToBluesky, nagi: shareToNagi },
       );
 
       // The diary itself is saved; only report which crossposts failed
@@ -299,6 +303,15 @@
         <label class="flex items-center gap-1.5 cursor-pointer">
           <input
             type="checkbox"
+            bind:checked={shareToNagi}
+            aria-label={$t("editor.share_nagi")}
+            class="form-checkbox h-4 w-4 text-fuchsia-500 rounded border-slate-500 bg-black/20 focus:ring-0 focus:ring-offset-0"
+          />
+          <span class="text-xs text-slate-300 select-none">Nagi</span>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
             bind:checked={rememberSettings}
             class="form-checkbox h-4 w-4 text-fuchsia-500 rounded border-slate-500 bg-black/20 focus:ring-0 focus:ring-offset-0"
           />
@@ -406,6 +419,22 @@
           type="checkbox"
           bind:checked={shareToBluesky}
           aria-label={$t("editor.share_bluesky")}
+          class="sr-only peer"
+        />
+        <div
+          class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"
+        ></div>
+      </label>
+    </div>
+    <div class="flex items-center justify-between">
+      <span class="text-sm font-medium text-slate-300"
+        >{$t("editor.share_nagi")}</span
+      >
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          bind:checked={shareToNagi}
+          aria-label={$t("editor.share_nagi")}
           class="sr-only peer"
         />
         <div
