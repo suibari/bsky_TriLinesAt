@@ -1,7 +1,6 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import { session, initSession } from "$lib/auth/session";
-  import { IDS } from "$lib/types";
   import DiaryCard from "$lib/components/DiaryCard.svelte";
   import { goto } from "$app/navigation";
   import { ChevronLeft, Loader2 } from "lucide-svelte";
@@ -17,7 +16,7 @@
   let loading = true;
 
   import { get } from "svelte/store";
-  import { getPds } from "$lib/bsky";
+  import { getEntryRecord, getPds } from "$lib/bsky";
   import { Agent } from "@atproto/api";
 
   onMount(async () => {
@@ -61,11 +60,7 @@
         console.warn("Failed to resolve PDS", e);
       }
 
-      const { data: record } = await pdsAgent.api.com.atproto.repo.getRecord({
-        repo: did!,
-        collection: IDS.TriLinesEntry,
-        rkey: rkey!,
-      });
+      const record = await getEntryRecord(pdsAgent, did!, rkey!);
 
       entry = {
         ...record.value,

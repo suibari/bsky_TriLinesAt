@@ -1,7 +1,15 @@
 import { get } from 'svelte/store';
 import { session } from './auth/session';
 import { TID } from '@atproto/common-web';
-import { IDS, type TriLinesEntry, type TriLinesLine, type TriLinesLike } from './types';
+import {
+  ENTRY_COLLECTIONS,
+  IDS,
+  LIKE_COLLECTIONS,
+  collectionOf,
+  type TriLinesEntry,
+  type TriLinesLine,
+  type TriLinesLike
+} from './types';
 import { Agent, RichText, type BlobRef } from '@atproto/api';
 import { t, locale } from './i18n';
 import { getAppOrigin } from './config';
@@ -77,10 +85,9 @@ function getImageDims(blob: Blob): Promise<{ width: number; height: number }> {
   });
 }
 
-export type ShareTarget = 'bluesky' | 'nagi';
+export type ShareTarget = 'bluesky';
 
 // Builds the share post text with a link facet pointing to the entry page.
-// Facets use app.bsky.richtext.facet, which Nagi posts share.
 async function buildShareText(agent: Agent, lines: { text: string }[], did: string, rkey: string) {
   const rawSummary = lines.map(l => l.text).join('\n');
   const summary = rawSummary.length > 200
@@ -124,9 +131,13 @@ async function buildShareText(agent: Agent, lines: { text: string }[], did: stri
   return { text: rt.text, facets: rt.facets };
 }
 
+/**
+ * Creates a diary entry as com.suibari.trilinesat.diary, which Nagi also reads and shows natively.
+ * The legacy blue.trilinesat.diary is never written, and Nagi crossposts are gone for the same reason.
+ */
 export async function createDiary(
-  lines: { text: string; image?: Blob }[],
-  share: { bluesky: boolean; nagi: boolean }
+  lines: { text: string; image?: Blob; alt?: string }[],
+  share: { bluesky: boolean }
 ) {
   const agent = getAgent();
   const sessionDid = get(session).did!;
@@ -134,8 +145,7 @@ export async function createDiary(
   // 1. Upload images
   const processedLines: TriLinesLine[] = [];
 
-  // Define type locally or import if available. 
-  // app.bsky.embed.images#image structure (also valid for com.suibari.nagi.post#image)
+  // app.bsky.embed.images#image structure
   interface EmbedImage {
     image: BlobRef;
     alt: string;
@@ -145,6 +155,7 @@ export async function createDiary(
 
   for (const line of lines) {
     let imageBlob: BlobRef | undefined;
+    const alt = line.alt?.trim() || undefined;
     if (line.image) {
       const [uploaded, dims] = await Promise.all([
         uploadImage(line.image),
@@ -154,7 +165,7 @@ export async function createDiary(
 
       const embedImage: EmbedImage = {
         image: imageBlob,
-        alt: line.text.slice(0, 300) || "Diary Image"
+        alt: alt ?? (line.text.slice(0, 300) || "Diary Image")
       };
       if (dims.width > 0 && dims.height > 0) {
         embedImage.aspectRatio = dims;
@@ -163,25 +174,26 @@ export async function createDiary(
     }
     processedLines.push({
       text: line.text,
-      image: imageBlob
+      ...(imageBlob ? { image: imageBlob, ...(alt ? { alt } : {}) } : {}),
     });
   }
 
   const createdAt = new Date().toISOString();
+  const langs = [get(locale)];
 
   // 2. Initial Create of Custom Record (to get URI/Rkey)
-  const initialRecord: Omit<TriLinesEntry, 'uri' | 'cid'> = {
+  const initialRecord: Record<string, unknown> = {
+    $type: IDS.TriLinesEntry,
     lines: processedLines,
+    langs,
     createdAt,
-    sharedPost: undefined,
-    authorDid: sessionDid,
     hubRef: HUB_URI
   };
 
   const { data: entryData } = await agent.api.com.atproto.repo.createRecord({
     repo: sessionDid,
     collection: IDS.TriLinesEntry,
-    record: initialRecord as any,
+    record: initialRecord,
   });
 
   const entryUri = entryData.uri;
@@ -192,77 +204,47 @@ export async function createDiary(
 
   const shareErrors: ShareTarget[] = [];
   let linkError = false;
-  if (!share.bluesky && !share.nagi) {
+  if (!share.bluesky) {
     return { entry: entryData, shareErrors, linkError };
   }
 
-  // 3. Share to Bluesky / Nagi if requested (independently; one failing doesn't block the other)
-  let shareText: { text: string; facets: any[] };
+  // 3. Share to Bluesky if requested
+  let sharedPost: { uri: string; cid: string };
   try {
-    shareText = await buildShareText(agent, lines, sessionDid, rkey);
-  } catch (e) {
-    console.warn("Failed to build share text", e);
-    if (share.bluesky) shareErrors.push('bluesky');
-    if (share.nagi) shareErrors.push('nagi');
-    return { entry: entryData, shareErrors, linkError };
-  }
-  const langs = [get(locale)];
-  const images = embedImages.slice(0, 4);
-
-  const createPost = (collection: string, embed: object | undefined) =>
-    agent.api.com.atproto.repo.createRecord({
+    const shareText = await buildShareText(agent, lines, sessionDid, rkey);
+    const images = embedImages.slice(0, 4);
+    const res = await agent.api.com.atproto.repo.createRecord({
       repo: sessionDid,
-      collection,
-      // PDS doesn't know the Nagi lexicon, so skip server-side validation for it
-      ...(collection === IDS.NagiPost && { validate: false }),
+      collection: 'app.bsky.feed.post',
       record: {
-        $type: collection,
+        $type: 'app.bsky.feed.post',
         text: shareText.text,
         facets: shareText.facets,
         createdAt,
         langs,
-        embed
+        embed: images.length > 0 ? { $type: 'app.bsky.embed.images', images } : undefined
       },
-    }).then(res => ({ uri: res.data.uri, cid: res.data.cid }));
-
-  const [blueskyResult, nagiResult] = await Promise.allSettled([
-    share.bluesky
-      ? createPost('app.bsky.feed.post', images.length > 0 ? { $type: 'app.bsky.embed.images', images } : undefined)
-      : Promise.resolve(undefined),
-    share.nagi
-      ? createPost(IDS.NagiPost, images.length > 0 ? { $type: `${IDS.NagiPost}#images`, images } : undefined)
-      : Promise.resolve(undefined),
-  ]);
-
-  const updatedRecord = { ...initialRecord };
-  if (blueskyResult.status === 'fulfilled') {
-    updatedRecord.sharedPost = blueskyResult.value;
-  } else {
-    console.warn("Failed to share to Bluesky", blueskyResult.reason);
+    });
+    sharedPost = { uri: res.data.uri, cid: res.data.cid };
+  } catch (e) {
+    console.warn("Failed to share to Bluesky", e);
     shareErrors.push('bluesky');
-  }
-  if (nagiResult.status === 'fulfilled') {
-    updatedRecord.sharedNagiPost = nagiResult.value;
-  } else {
-    console.warn("Failed to share to Nagi", nagiResult.reason);
-    shareErrors.push('nagi');
+    return { entry: entryData, shareErrors, linkError };
   }
 
-  // 4. Update the Custom Record with shared post refs
-  if (updatedRecord.sharedPost || updatedRecord.sharedNagiPost) {
-    try {
-      await agent.api.com.atproto.repo.putRecord({
-        repo: sessionDid,
-        collection: IDS.TriLinesEntry,
-        rkey: rkey,
-        record: updatedRecord as any,
-        swapRecord: entryCid // optimistic concurrency control
-      });
-    } catch (e) {
-      // Posts exist but the entry won't link to them. Not fatal for the diary itself.
-      console.warn("Failed to update record with shared post refs", e);
-      linkError = true;
-    }
+  // 4. Update the Custom Record with the shared post ref
+  try {
+    await agent.api.com.atproto.repo.putRecord({
+      repo: sessionDid,
+      collection: IDS.TriLinesEntry,
+      rkey: rkey,
+      record: { ...initialRecord, sharedPost },
+      swapRecord: entryCid // optimistic concurrency control
+    });
+  } catch (e) {
+    // The post exists but the entry won't link to it. Not fatal for the diary itself.
+    console.warn("Failed to update record with shared post refs", e);
+    linkError = true;
   }
 
   return { entry: entryData, shareErrors, linkError };
@@ -372,27 +354,59 @@ export async function getEntries(did: string) {
     }
   }
 
-  let allRecords: any[] = [];
-  let cursor: string | undefined;
+  // New and legacy (read-only) collections are listed together and merged by date.
+  const perCollection = await Promise.all(
+    ENTRY_COLLECTIONS.map(async (collection) => {
+      const records: any[] = [];
+      let cursor: string | undefined;
+      do {
+        const { data } = await agent.api.com.atproto.repo.listRecords({
+          repo: did,
+          collection,
+          limit: 100,
+          cursor: cursor
+        });
+        records.push(...data.records);
+        cursor = data.cursor;
+      } while (cursor);
+      return records;
+    })
+  );
 
-  do {
-    const { data } = await agent.api.com.atproto.repo.listRecords({
-      repo: did,
-      collection: IDS.TriLinesEntry,
-      limit: 100,
-      cursor: cursor
-    });
+  return mergeEntriesByDate(
+    perCollection.flat().map((r: any) => ({
+      ...r.value,
+      uri: r.uri,
+      cid: r.cid,
+      authorDid: did // Don't trust authorDid in the record body
+    }))
+  );
+}
 
-    allRecords = [...allRecords, ...data.records];
-    cursor = data.cursor;
-  } while (cursor);
+/** Newest first. Entries without a valid createdAt sink to the bottom. */
+export function mergeEntriesByDate<T extends { createdAt?: string }>(entries: T[]): T[] {
+  const time = (entry: T) => {
+    const value = entry.createdAt ? Date.parse(entry.createdAt) : NaN;
+    return Number.isFinite(value) ? value : -Infinity;
+  };
+  return [...entries].sort((a, b) => time(b) - time(a));
+}
 
-  return allRecords.map((r: any) => ({
-    ...r.value,
-    uri: r.uri,
-    cid: r.cid,
-    authorDid: did // Don't trust authorDid in the record body
-  }));
+/**
+ * Reads one entry by rkey. Entry URLs (/entry/{did}/{rkey}) don't carry the NSID, so the new
+ * collection is tried first and the legacy one after.
+ */
+export async function getEntryRecord(agent: Agent, did: string, rkey: string) {
+  let lastError: unknown;
+  for (const collection of ENTRY_COLLECTIONS) {
+    try {
+      const { data } = await agent.api.com.atproto.repo.getRecord({ repo: did, collection, rkey });
+      return data;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 // HUB_URI is the target for Global Feed aggregation via Constellation.
@@ -427,27 +441,64 @@ async function limitConcurrency<T>(items: any[], limit: number, fn: (item: any) 
   return results;
 }
 
-export async function getGlobalFeed(cursor?: string, limit = 50) {
-  // Use Constellation to find all diary entries linking to the HUB_URI
-  const endpoint = 'https://constellation.microcosm.blue/links';
-  const url = new URL(endpoint);
+/**
+ * Hub backlinks come from Constellation, which filters by a single collection, so the new and
+ * legacy NSIDs are queried separately and share one cursor: a JSON object of per-collection
+ * cursors (null once a collection is exhausted).
+ */
+type HubCursor = Record<string, string | null>;
+
+export function parseHubCursor(cursor?: string): HubCursor | undefined {
+  if (!cursor) return undefined;
+  try {
+    const parsed = JSON.parse(cursor);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch {
+    // A plain cursor from before the NSID migration belongs to the legacy collection.
+  }
+  return { [IDS.TriLinesEntry]: null, [IDS.LegacyTriLinesEntry]: cursor };
+}
+
+async function fetchHubLinks(collection: string, cursor: string | undefined, limit: number) {
+  const url = new URL('https://constellation.microcosm.blue/links');
   url.searchParams.set('target', HUB_URI);
-  url.searchParams.set('collection', IDS.TriLinesEntry);
+  url.searchParams.set('collection', collection);
   url.searchParams.set('path', '.hubRef');
   url.searchParams.set('limit', limit.toString());
-  if (cursor) {
-    url.searchParams.set('cursor', cursor);
-  }
+  if (cursor) url.searchParams.set('cursor', cursor);
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error('Constellation feed fetch failed');
+  const data = await res.json();
+  const rawLinks: any[] = Array.isArray(data) ? data : (data.linking_records || data.links || []);
+  const nextCursor: string | undefined = !Array.isArray(data) ? data.cursor || undefined : undefined;
+  // Constellation may omit the collection on each link; keep it so URIs resolve to the right NSID.
+  return {
+    links: rawLinks.map((link) => ({ collection, ...link })),
+    cursor: nextCursor,
+  };
+}
 
+export async function fetchHubLinksAll(cursor: string | undefined, limit: number) {
+  const state = parseHubCursor(cursor);
+  const pages = await Promise.all(
+    ENTRY_COLLECTIONS.map(async (collection) => {
+      // The first page reads every collection; later pages only continue unfinished ones.
+      if (state && !state[collection]) return { collection, links: [] as any[], cursor: undefined };
+      const page = await fetchHubLinks(collection, state?.[collection] ?? undefined, limit);
+      return { collection, ...page };
+    })
+  );
+  const next: HubCursor = Object.fromEntries(pages.map((p) => [p.collection, p.cursor ?? null]));
+  const hasMore = Object.values(next).some(Boolean);
+  return {
+    links: pages.flatMap((p) => p.links),
+    cursor: hasMore ? JSON.stringify(next) : undefined,
+  };
+}
+
+export async function getGlobalFeed(cursor?: string, limit = 50) {
   try {
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error('Constellation feed fetch failed');
-
-    const data = await res.json();
-    // Handle various Constellation response formats
-    // If paginated, it might return { cursor: "...", links: [...] }
-    const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
-    const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
+    const { links: rawLinks, cursor: nextCursor } = await fetchHubLinksAll(cursor, limit);
 
     // Use concurrency limited processing
     const entries = await limitConcurrency(rawLinks, 30, async (item: any) => {
@@ -530,28 +581,11 @@ export async function getGlobalFeed(cursor?: string, limit = 50) {
 
 // Helper to get raw Constellation links without resolving records
 async function getGlobalFeedLinks(cursor?: string, limit = 50) {
-  const endpoint = 'https://constellation.microcosm.blue/links';
-  const url = new URL(endpoint);
-  url.searchParams.set('target', HUB_URI);
-  url.searchParams.set('collection', IDS.TriLinesEntry);
-  url.searchParams.set('path', '.hubRef');
-  url.searchParams.set('limit', limit.toString());
-  if (cursor) {
-    url.searchParams.set('cursor', cursor);
-  }
-
   try {
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error('Constellation feed fetch failed');
-
-    const data = await res.json();
-    const rawLinks = Array.isArray(data) ? data : (data.linking_records || data.links || []);
-    const nextCursor = !Array.isArray(data) ? data.cursor : undefined;
-
-    return { links: rawLinks, cursor: nextCursor };
+    return await fetchHubLinksAll(cursor, limit);
   } catch (e) {
     console.warn("Global feed links fetch failed", e);
-    return { links: [], cursor: undefined };
+    return { links: [] as any[], cursor: undefined };
   }
 }
 
@@ -581,7 +615,7 @@ export async function getAllEntriesForRanking() {
   const entries = allLinks.map((link) => {
     const did = link.author || link.did;
     const rkey = link.rkey || link.uri?.split('/').pop();
-    const uri = link.uri || `at://${did}/${IDS.TriLinesEntry}/${rkey}`;
+    const uri = link.uri || `at://${did}/${link.collection || IDS.TriLinesEntry}/${rkey}`;
     const cid = link.cid || 'unknown'; // CID is not critical for ranking (createdAt is)
 
     // Optimization: Infer createdAt from rkey
@@ -704,9 +738,16 @@ export async function unlikeEntry(uri: string) {
   });
 }
 
+// Stars on an entry, from both the new and the legacy like collections.
 export async function getEntryLikes(uri: string) {
   if (!uri) return [];
-  // Use Constellation to find likes
+  const perCollection = await Promise.all(
+    LIKE_COLLECTIONS.map((collection) => getEntryLikesIn(uri, collection))
+  );
+  return perCollection.flat();
+}
+
+async function getEntryLikesIn(uri: string, collection: string) {
   // links?target={uri}&collection={collection}&path={path}
   const endpoint = 'https://constellation.microcosm.blue/links';
   const links: any[] = [];
@@ -714,7 +755,7 @@ export async function getEntryLikes(uri: string) {
   do {
     const url = new URL(endpoint);
     url.searchParams.set('target', uri);
-    url.searchParams.set('collection', IDS.TriLinesLike);
+    url.searchParams.set('collection', collection);
     url.searchParams.set('path', '.subject.uri');
     url.searchParams.set('limit', '100');
     if (cursor) url.searchParams.set('cursor', cursor);
@@ -728,11 +769,11 @@ export async function getEntryLikes(uri: string) {
     // Constellation /links endpoint typically returns an array of links.
     // Newer XRPC endpoints might return { links: [...] } or { linking_records: [...] }.
     // We handle both for robustness.
-    if (Array.isArray(data)) return [...links, ...data];
+    if (Array.isArray(data)) return [...links, ...data].map((link) => ({ collection, ...link }));
     links.push(...(data.linking_records || (data as any).links || []));
     cursor = data.cursor || undefined;
   } while (cursor);
-  return links;
+  return links.map((link) => ({ collection, ...link }));
 }
 
 // Author DID of a Constellation link, which may be nested under `value`
@@ -746,7 +787,7 @@ export function getBlobUrl(did: string, blob: BlobRef, type: 'fullsize' | 'thumb
 
 export async function deleteAllData(did: string) {
   const agent = getAgent();
-  const collections = [IDS.TriLinesEntry, IDS.TriLinesLike];
+  const collections = [...ENTRY_COLLECTIONS, ...LIKE_COLLECTIONS];
 
   for (const collection of collections) {
     let cursor: string | undefined;
@@ -805,16 +846,23 @@ async function getLinkingDids(target: string, collection: string, path: string):
 }
 
 // Likes on the crossposted Bluesky post and reactions on the crossposted Nagi post
+// Likes from the other apps, merged with TriLinesAt stars by the caller (one count per DID):
+// - Bluesky likes on the crossposted post
+// - Nagi reactions on the diary itself (com.suibari.trilinesat.diary is shown natively in Nagi)
+// - Nagi reactions on the legacy crossposted Nagi post (blue.trilinesat.diary entries only)
 export async function getSharedPostLikerDids(entry: TriLinesEntry): Promise<string[]> {
-  const [bskyDids, nagiDids] = await Promise.all([
+  const [bskyDids, nagiDids, legacyNagiDids] = await Promise.all([
     entry.sharedPost?.uri
       ? getLinkingDids(entry.sharedPost.uri, 'app.bsky.feed.like', '.subject.uri').catch(() => [])
+      : [],
+    collectionOf(entry.uri) === IDS.TriLinesEntry
+      ? getLinkingDids(entry.uri, IDS.NagiReaction, '.subject.uri').catch(() => [])
       : [],
     entry.sharedNagiPost?.uri
       ? getLinkingDids(entry.sharedNagiPost.uri, IDS.NagiReaction, '.subject.uri').catch(() => [])
       : [],
   ]);
-  return [...bskyDids, ...nagiDids];
+  return [...bskyDids, ...nagiDids, ...legacyNagiDids];
 }
 
 export async function getPostInteractionState(entry: TriLinesEntry, viewerDid?: string, skipAvatarFetch = false) {

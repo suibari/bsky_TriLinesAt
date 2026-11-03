@@ -125,12 +125,14 @@ vi.mock('$lib/i18n', () => ({
   locale: { _id: 'locale' }
 }));
 
-import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds, uploadImage, createDiary } from '$lib/bsky';
+import { getEntries, getGlobalFeed, getAllEntriesForRanking, getPostInteractionState, getPds, uploadImage, createDiary, parseHubCursor, getEntryLikes } from '$lib/bsky';
 
 globalThis.fetch = vi.fn();
 
-// createDiary の共有指定。互換性テストを変更前のコード（第2引数が boolean）でも実行できるよう、ここに集約する。
-const shareOpt = (bluesky: boolean): any => ({ bluesky, nagi: false });
+// createDiary の共有指定。Nagi へのクロスポストは廃止した（Nagi は日記レコードを直接表示する）。
+const shareOpt = (bluesky: boolean): any => ({ bluesky });
+const NEW_ENTRY = 'com.suibari.trilinesat.diary';
+const LEGACY_ENTRY = 'blue.trilinesat.diary';
 
 // Node には Image が無いので、読み込み完了を即座に通知するスタブを用意する
 function stubImage(width: number, height: number) {
@@ -177,33 +179,44 @@ describe('bsky utils', () => {
 
   describe('getEntries', () => {
     it('ページネーションを処理して全レコードを取得できること', async () => {
-      mockListRecords.mockResolvedValueOnce({
-        data: {
-          cursor: 'cursor-1',
-          records: [
-            { uri: 'uri1', cid: 'cid1', value: { text: 'entry1' } }
-          ]
-        }
-      });
-      mockListRecords.mockResolvedValueOnce({
-        data: {
-          cursor: undefined,
-          records: [
-            { uri: 'uri2', cid: 'cid2', value: { text: 'entry2' } }
-          ]
-        }
+      mockListRecords.mockImplementation(async ({ collection, cursor }: any) => {
+        if (collection === NEW_ENTRY)
+          return cursor
+            ? { data: { cursor: undefined, records: [{ uri: 'uri2', cid: 'cid2', value: { text: 'entry2', createdAt: '2026-11-02T00:00:00Z' } }] } }
+            : { data: { cursor: 'cursor-1', records: [{ uri: 'uri1', cid: 'cid1', value: { text: 'entry1', createdAt: '2026-11-03T00:00:00Z' } }] } };
+        return { data: { cursor: undefined, records: [] } };
       });
 
       const entries = await getEntries('did:self');
 
-      expect(mockListRecords).toHaveBeenCalledTimes(2);
+      // 新NSIDを2ページ、旧NSIDを1ページ読む
+      expect(mockListRecords).toHaveBeenCalledTimes(3);
       expect(entries).toHaveLength(2);
+    });
+
+    it('新旧両方のNSIDの日記を作成日時の新しい順にまとめること', async () => {
+      mockListRecords.mockImplementation(async ({ collection }: any) => ({
+        data: {
+          records: collection === NEW_ENTRY
+            ? [{ uri: `at://did:self/${NEW_ENTRY}/n1`, cid: 'c', value: { createdAt: '2026-11-03T00:00:00Z' } }]
+            : [
+                { uri: `at://did:self/${LEGACY_ENTRY}/o1`, cid: 'c', value: { createdAt: '2026-11-04T00:00:00Z' } },
+                { uri: `at://did:self/${LEGACY_ENTRY}/o2`, cid: 'c', value: { createdAt: '2026-10-01T00:00:00Z' } },
+              ],
+        },
+      }));
+
+      const entries = await getEntries('did:self');
+      expect(entries.map((e: any) => e.uri.split('/').pop())).toEqual(['o1', 'n1', 'o2']);
     });
   });
 
   describe('getGlobalFeed', () => {
     it('Constellationからフィードを取得し、レコードを解決できること', async () => {
       (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        if (url.includes('constellation') && url.includes(encodeURIComponent(NEW_ENTRY))) {
+          return { ok: true, json: async () => [] };
+        }
         if (url.includes('constellation')) {
           return {
             ok: true,
@@ -245,6 +258,39 @@ describe('bsky utils', () => {
       expect(posts).toHaveLength(2);
       expect(posts[0].text).toBe('Available in Constellation');
       expect(posts[1].text).toBe('Fetched from PDS');
+      // 旧NSIDのリンクは旧NSIDで PDS から引く
+      expect(mockGetRecord).toHaveBeenCalledWith(expect.objectContaining({ collection: LEGACY_ENTRY }));
+    });
+
+    it('新旧のコレクションを別々に引き、カーソルをまとめて返すこと', async () => {
+      const requested: string[] = [];
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const parsed = new URL(url);
+        requested.push(`${parsed.searchParams.get('collection')}:${parsed.searchParams.get('cursor') ?? ''}`);
+        const collection = parsed.searchParams.get('collection');
+        return {
+          ok: true,
+          json: async () => ({
+            cursor: collection === NEW_ENTRY ? 'n-next' : undefined,
+            linking_records: [],
+          }),
+        };
+      });
+
+      const first = await getGlobalFeed();
+      expect(requested.sort()).toEqual([`${LEGACY_ENTRY}:`, `${NEW_ENTRY}:`]);
+      expect(parseHubCursor(first.cursor)).toEqual({ [NEW_ENTRY]: 'n-next', [LEGACY_ENTRY]: null });
+
+      requested.length = 0;
+      const second = await getGlobalFeed(first.cursor);
+      // 終わった旧NSIDはもう引かない
+      expect(requested).toEqual([`${NEW_ENTRY}:n-next`]);
+      expect(second.cursor).toBe(JSON.stringify({ [NEW_ENTRY]: 'n-next', [LEGACY_ENTRY]: null }));
+    });
+
+    it('移行前の素のカーソルは旧NSIDの続きとして扱うこと', () => {
+      expect(parseHubCursor('old-cursor')).toEqual({ [NEW_ENTRY]: null, [LEGACY_ENTRY]: 'old-cursor' });
+      expect(parseHubCursor(undefined)).toBeUndefined();
     });
   });
 
@@ -252,6 +298,9 @@ describe('bsky utils', () => {
     it('ページネーションを行い、すべてのリンクを取得できること', async () => {
       let callCount = 0;
       (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        if (url.includes('constellation') && url.includes(encodeURIComponent(NEW_ENTRY))) {
+          return { ok: true, json: async () => ({ cursor: undefined, links: [{ did: 'did:3', rkey: 'rkey3' }] }) };
+        }
         if (url.includes('constellation')) {
           callCount++;
           if (callCount === 1) {
@@ -277,8 +326,11 @@ describe('bsky utils', () => {
 
       const entries = await getAllEntriesForRanking();
 
-      expect(entries).toHaveLength(2);
-      expect(entries[0].authorDid).toBe('did:1');
+      expect(entries).toHaveLength(3);
+      expect(entries.map((e) => e.authorDid).sort()).toEqual(['did:1', 'did:2', 'did:3']);
+      // リンクのコレクションから URI を組み立てる
+      expect(entries.find((e) => e.authorDid === 'did:3')?.uri).toBe(`at://did:3/${NEW_ENTRY}/rkey3`);
+      expect(entries.find((e) => e.authorDid === 'did:1')?.uri).toBe(`at://did:1/${LEGACY_ENTRY}/rkey1`);
     });
   });
 
@@ -340,6 +392,53 @@ describe('bsky utils', () => {
       expect(result.viewerLike).toBeUndefined();
       expect(result.viewerSharedLike).toBe(true);
       expect(result.candidateDids).toEqual(['did:a', 'did:b', 'did:self', 'did:c']);
+    });
+
+    it('新NSIDの日記では、TriLinesAtのスター・Blueskyのいいね・日記へのNagiリアクションを1人1回で合算すること', async () => {
+      const entry = {
+        uri: 'at://did:author/com.suibari.trilinesat.diary/rkey',
+        sharedPost: { uri: 'at://did:author/app.bsky.feed.post/bsky', cid: 'c1' },
+      };
+      const reactionTargets: string[] = [];
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        const collection = u.searchParams.get('collection');
+        if (collection === 'com.suibari.trilinesat.like') {
+          return { ok: true, json: async () => ({ linking_records: [{ did: 'did:star', collection, rkey: 'l1' }] }) };
+        }
+        if (collection === 'app.bsky.feed.like') {
+          return { ok: true, json: async () => ({ linking_dids: ['did:bsky', 'did:star'], cursor: null }) };
+        }
+        if (collection === 'com.suibari.nagi.reaction') {
+          reactionTargets.push(u.searchParams.get('target')!);
+          return { ok: true, json: async () => ({ linking_dids: ['did:nagi', 'did:self'], cursor: null }) };
+        }
+        return { ok: true, json: async () => ({ linking_records: [] }) };
+      });
+
+      const result = await getPostInteractionState(entry as any, 'did:self', true);
+
+      // 日記そのものを指す Nagi リアクションを数える（Nagi へのクロスポストは無い）。
+      expect(reactionTargets).toEqual([entry.uri]);
+      expect(result.likeCount).toBe(4); // did:star, did:bsky, did:nagi, did:self
+      expect(result.viewerLike).toBeUndefined();
+      expect(result.viewerSharedLike).toBe(true);
+    });
+
+    it('旧NSIDの日記では、日記URIへのNagiリアクションは引かないこと', async () => {
+      const entry = { uri: 'at://did:author/blue.trilinesat.diary/rkey' };
+      const reactionTargets: string[] = [];
+
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const u = new URL(url);
+        if (u.searchParams.get('collection') === 'com.suibari.nagi.reaction')
+          reactionTargets.push(u.searchParams.get('target')!);
+        return { ok: true, json: async () => ({ linking_records: [], linking_dids: [] }) };
+      });
+
+      await getPostInteractionState(entry as any, undefined, true);
+      expect(reactionTargets).toEqual([]);
     });
 
     it('共有投稿へのいいね取得をページングして全件集めること', async () => {
@@ -449,60 +548,25 @@ describe('bsky utils', () => {
 
     it('共有なしの場合、日記レコードのみ作成されること', async () => {
       mockCreateRecord.mockResolvedValue({
-        data: { uri: 'at://did:self/blue.trilinesat.diary/rkey123', cid: 'cid' }
+        data: { uri: `at://did:self/${NEW_ENTRY}/rkey123`, cid: 'cid' }
       });
 
-      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: false, nagi: false });
+      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: false });
 
       expect(mockCreateRecord).toHaveBeenCalledTimes(1);
       expect(mockPutRecord).not.toHaveBeenCalled();
       expect(result.shareErrors).toEqual([]);
     });
 
-    it('Nagiに共有する場合、com.suibari.nagi.postとして画像付きで投稿されること', async () => {
+    it('Nagiへのクロスポストは作らないこと（Nagiは日記レコードを直接表示する）', async () => {
       mockCreateRecord.mockImplementation(async ({ collection }: any) => ({
-        data: { uri: `at://did:self/${collection}/rkey123`, cid: `cid-${collection}` }
+        data: { uri: `at://did:self/${collection}/rkey123`, cid: 'cid' }
       }));
-      mockUploadBlob.mockResolvedValue({ data: { blob: 'blob' } });
 
-      stubImage(0, 0);
-      const image = new Blob(['x'], { type: 'image/png' });
-      const result = await createDiary([{ text: 'Diary entry', image }], { bluesky: false, nagi: true });
+      await createDiary([{ text: 'Diary entry' }], { bluesky: true, nagi: true } as any);
 
-      expect(mockCreateRecord).toHaveBeenCalledTimes(2);
-      const nagiCall = mockCreateRecord.mock.calls[1][0];
-      expect(nagiCall.collection).toBe('com.suibari.nagi.post');
-      expect(nagiCall.validate).toBe(false);
-      expect(nagiCall.record.$type).toBe('com.suibari.nagi.post');
-      expect(nagiCall.record.embed.$type).toBe('com.suibari.nagi.post#images');
-      expect(nagiCall.record.embed.images[0].image).toBe('blob');
-      expect(nagiCall.record.facets.some((f: any) =>
-        f.features[0].$type === 'app.bsky.richtext.facet#link'
-      )).toBe(true);
-
-      const putCall = mockPutRecord.mock.calls[0][0];
-      expect(putCall.record.sharedNagiPost).toEqual({
-        uri: 'at://did:self/com.suibari.nagi.post/rkey123',
-        cid: 'cid-com.suibari.nagi.post'
-      });
-      expect(putCall.record.sharedPost).toBeUndefined();
-      expect(result.shareErrors).toEqual([]);
-      vi.unstubAllGlobals();
-    });
-
-    it('片方の共有が失敗しても、もう片方は保存されエラーが返ること', async () => {
-      mockCreateRecord.mockImplementation(async ({ collection }: any) => {
-        if (collection === 'com.suibari.nagi.post') throw new Error('ScopeMissing');
-        return { data: { uri: `at://did:self/${collection}/rkey123`, cid: 'cid' } };
-      });
-
-      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: true, nagi: true });
-
-      expect(mockCreateRecord).toHaveBeenCalledTimes(3);
-      const putCall = mockPutRecord.mock.calls[0][0];
-      expect(putCall.record.sharedPost.uri).toBe('at://did:self/app.bsky.feed.post/rkey123');
-      expect(putCall.record.sharedNagiPost).toBeUndefined();
-      expect(result.shareErrors).toEqual(['nagi']);
+      const collections = mockCreateRecord.mock.calls.map(([args]: any) => args.collection);
+      expect(collections).toEqual([NEW_ENTRY, 'app.bsky.feed.post']);
     });
 
     it('日記への投稿参照の保存に失敗した場合、linkErrorが返ること', async () => {
@@ -511,7 +575,7 @@ describe('bsky utils', () => {
       }));
       mockPutRecord.mockRejectedValueOnce(new Error('InvalidSwap'));
 
-      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: true, nagi: true });
+      const result = await createDiary([{ text: 'Diary entry' }], { bluesky: true });
 
       expect(mockPutRecord).toHaveBeenCalledTimes(1);
       expect(result.shareErrors).toEqual([]);
@@ -519,18 +583,18 @@ describe('bsky utils', () => {
     });
   });
 
-  // 変更前の実装と送信内容が完全一致することを固定する特性テスト。
-  // 変更前コードでも同じテストが通ることを確認済み（shareOpt で引数形式だけ吸収）。
+  // 送信内容を固定する特性テスト。com.suibari.trilinesat.diary への移行で、日記レコードは
+  // $type と langs を持ち、authorDid と空の image / sharedPost を書かなくなった。Bluesky 投稿は変更前と同じ。
   describe('互換性: createDiary の Bluesky 共有', () => {
     const NOW = '2025-01-02T03:04:05.000Z';
-    const ENTRY_URI = 'at://did:self/blue.trilinesat.diary/rkey123';
+    const ENTRY_URI = `at://did:self/${NEW_ENTRY}/rkey123`;
     const HUB = 'at://did:plc:uixgxpiqf4i63p6rgpu7ytmx/app.bsky.actor.profile/self';
     const lines = [{ text: 'A' }, { text: 'B' }, { text: 'C' }];
 
     beforeEach(() => {
       vi.setSystemTime(new Date(NOW));
       mockCreateRecord.mockImplementation(async ({ collection }: any) => (
-        collection === 'blue.trilinesat.diary'
+        collection === NEW_ENTRY
           ? { data: { uri: ENTRY_URI, cid: 'entry-cid' } }
           : { data: { uri: `at://did:self/${collection}/post1`, cid: 'post-cid' } }
       ));
@@ -547,16 +611,12 @@ describe('bsky utils', () => {
       expect(mockCreateRecord).toHaveBeenCalledTimes(1);
       expect(mockCreateRecord.mock.calls[0][0]).toEqual({
         repo: 'did:self',
-        collection: 'blue.trilinesat.diary',
+        collection: NEW_ENTRY,
         record: {
-          lines: [
-            { text: 'A', image: undefined },
-            { text: 'B', image: undefined },
-            { text: 'C', image: undefined },
-          ],
+          $type: NEW_ENTRY,
+          lines: [{ text: 'A' }, { text: 'B' }, { text: 'C' }],
+          langs: ['en'],
           createdAt: NOW,
-          sharedPost: undefined,
-          authorDid: 'did:self',
           hubRef: HUB,
         },
       });
@@ -573,19 +633,15 @@ describe('bsky utils', () => {
 
       // 1. 日記レコード
       const entryRecord = {
-        lines: [
-          { text: 'A', image: 'blob-ref' },
-          { text: 'B', image: undefined },
-          { text: 'C', image: undefined },
-        ],
+        $type: NEW_ENTRY,
+        lines: [{ text: 'A', image: 'blob-ref' }, { text: 'B' }, { text: 'C' }],
+        langs: ['en'],
         createdAt: NOW,
-        sharedPost: undefined,
-        authorDid: 'did:self',
         hubRef: HUB,
       };
       expect(mockCreateRecord.mock.calls[0][0]).toEqual({
         repo: 'did:self',
-        collection: 'blue.trilinesat.diary',
+        collection: NEW_ENTRY,
         record: entryRecord,
       });
 
@@ -630,11 +686,21 @@ describe('bsky utils', () => {
       expect(mockPutRecord).toHaveBeenCalledTimes(1);
       expect(mockPutRecord.mock.calls[0][0]).toEqual({
         repo: 'did:self',
-        collection: 'blue.trilinesat.diary',
+        collection: NEW_ENTRY,
         rkey: 'rkey123',
         record: { ...entryRecord, sharedPost: { uri: 'at://did:self/app.bsky.feed.post/post1', cid: 'post-cid' } },
         swapRecord: 'entry-cid',
       });
+    });
+
+    it('画像に alt があれば日記と Bluesky 投稿の両方に使うこと', async () => {
+      stubImage(800, 600);
+      const image = new Blob(['x'], { type: 'image/png' });
+
+      await createDiary([{ text: 'A', image, alt: ' 猫の写真 ' }, { text: 'B' }, { text: 'C' }], shareOpt(true));
+
+      expect(mockCreateRecord.mock.calls[0][0].record.lines[0]).toEqual({ text: 'A', image: 'blob-ref', alt: '猫の写真' });
+      expect(mockCreateRecord.mock.calls[1][0].record.embed.images[0].alt).toBe('猫の写真');
     });
 
     it('画像なしならembedを付けず、長い本文は200文字で要約すること', async () => {
@@ -658,11 +724,35 @@ describe('bsky utils', () => {
     });
   });
 
+  describe('getEntryLikes', () => {
+    it('新旧両方のスターを集め、それぞれのコレクションを付けること', async () => {
+      (globalThis.fetch as Mock).mockImplementation(async (url: string) => {
+        const collection = new URL(url).searchParams.get('collection');
+        return {
+          ok: true,
+          json: async () => ({ linking_records: [{ did: collection === 'blue.trilinesat.like' ? 'did:old' : 'did:new', rkey: 'l' }] }),
+        };
+      });
+
+      const links = await getEntryLikes('at://did:a/com.suibari.trilinesat.diary/r');
+      expect(links).toEqual(
+        expect.arrayContaining([
+          { collection: 'com.suibari.trilinesat.like', did: 'did:new', rkey: 'l' },
+          { collection: 'blue.trilinesat.like', did: 'did:old', rkey: 'l' },
+        ]),
+      );
+    });
+  });
+
   describe('getEntries の authorDid', () => {
     it('レコード本体のauthorDidではなくリポジトリのDIDを採用すること', async () => {
-      mockListRecords.mockResolvedValueOnce({
-        data: { records: [{ uri: 'at://did:self/blue.trilinesat.diary/r1', cid: 'c1', value: { authorDid: 'did:plc:someone-else' } }] }
-      });
+      mockListRecords.mockImplementation(async ({ collection }: any) => ({
+        data: {
+          records: collection === LEGACY_ENTRY
+            ? [{ uri: `at://did:self/${LEGACY_ENTRY}/r1`, cid: 'c1', value: { authorDid: 'did:plc:someone-else' } }]
+            : [],
+        },
+      }));
 
       const entries = await getEntries('did:self');
       expect(entries[0].authorDid).toBe('did:self');
