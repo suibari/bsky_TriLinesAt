@@ -569,6 +569,23 @@ describe('bsky utils', () => {
       expect(collections).toEqual([NEW_ENTRY, 'app.bsky.feed.post']);
     });
 
+    it('Nagiを選んだときだけ日記にshareToNagiの印を付けること', async () => {
+      mockCreateRecord.mockResolvedValue({
+        data: { uri: `at://did:self/${NEW_ENTRY}/rkey123`, cid: 'cid' }
+      });
+
+      await createDiary([{ text: 'Diary entry' }], { bluesky: false, nagi: true });
+      expect(mockCreateRecord.mock.calls[0][0].record.shareToNagi).toBe(true);
+
+      mockCreateRecord.mockClear();
+      await createDiary([{ text: 'Diary entry' }], { bluesky: false });
+      expect(mockCreateRecord.mock.calls[0][0].record).not.toHaveProperty('shareToNagi');
+
+      mockCreateRecord.mockClear();
+      await createDiary([{ text: 'Diary entry' }], { bluesky: false, nagi: false });
+      expect(mockCreateRecord.mock.calls[0][0].record).not.toHaveProperty('shareToNagi');
+    });
+
     it('日記への投稿参照の保存に失敗した場合、linkErrorが返ること', async () => {
       mockCreateRecord.mockImplementation(async ({ collection }: any) => ({
         data: { uri: `at://did:self/${collection}/rkey123`, cid: 'cid' }
