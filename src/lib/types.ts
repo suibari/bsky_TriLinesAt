@@ -25,6 +25,8 @@ export interface TriLinesEntry {
   /** Repo DID resolved by the client. Not written to new records. */
   authorDid: string;
   hubRef?: string; // DID of the "Hub" for global feed aggregation
+  /** Nagi shows the entry as a post only when true. Opt-in from TriLinesAt; always set by Nagi. */
+  shareToNagi?: boolean;
 }
 
 export interface TriLinesLike {
@@ -36,7 +38,7 @@ export interface TriLinesLike {
 }
 
 export const IDS = {
-  /** Current diary NSID. All new entries are written here (shared with Nagi). */
+  /** Current diary NSID. All new entries are written here (Nagi reads it, but shows only shareToNagi entries). */
   TriLinesEntry: 'com.suibari.trilinesat.diary',
   TriLinesLike: 'com.suibari.trilinesat.like',
   /** Legacy NSIDs. Read only: shown, edited and deleted, but never created. */

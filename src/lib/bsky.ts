@@ -132,12 +132,13 @@ async function buildShareText(agent: Agent, lines: { text: string }[], did: stri
 }
 
 /**
- * Creates a diary entry as com.suibari.trilinesat.diary, which Nagi also reads and shows natively.
+ * Creates a diary entry as com.suibari.trilinesat.diary, which Nagi also reads.
+ * Nagi shows the entry only when share.nagi marks it with shareToNagi (opt-in, no crosspost).
  * The legacy blue.trilinesat.diary is never written, and Nagi crossposts are gone for the same reason.
  */
 export async function createDiary(
   lines: { text: string; image?: Blob; alt?: string }[],
-  share: { bluesky: boolean }
+  share: { bluesky: boolean; nagi?: boolean }
 ) {
   const agent = getAgent();
   const sessionDid = get(session).did!;
@@ -187,7 +188,8 @@ export async function createDiary(
     lines: processedLines,
     langs,
     createdAt,
-    hubRef: HUB_URI
+    hubRef: HUB_URI,
+    ...(share.nagi ? { shareToNagi: true } : {})
   };
 
   const { data: entryData } = await agent.api.com.atproto.repo.createRecord({
