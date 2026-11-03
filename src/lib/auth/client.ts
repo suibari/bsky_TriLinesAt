@@ -9,7 +9,7 @@ export async function createClient() {
   const origin = getAppOrigin();
 
   const enc = encodeURIComponent;
-  const scope = "atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create repo:com.suibari.nagi.post?action=create";
+  const scope = "atproto blob:*/* repo:com.suibari.trilinesat.diary repo:com.suibari.trilinesat.like repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create";
   const redirectUri = `${origin}/`; // We use root as redirect
 
   let client_id = "";

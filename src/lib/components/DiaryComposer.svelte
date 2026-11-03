@@ -11,7 +11,6 @@
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { t, locale } from "$lib/i18n";
-  import { NAGI_URL } from "$lib/config";
   import { getRandomPlaceholders } from "$lib/constants/placeholders";
   import { calculateRankings } from "$lib/ranking";
   import { onMount } from "svelte";
@@ -24,9 +23,9 @@
   let expanded = false;
 
   let lines = [
-    { text: "", image: undefined as Blob | undefined, preview: "" },
-    { text: "", image: undefined as Blob | undefined, preview: "" },
-    { text: "", image: undefined as Blob | undefined, preview: "" },
+    { text: "", image: undefined as Blob | undefined, preview: "", alt: "" },
+    { text: "", image: undefined as Blob | undefined, preview: "", alt: "" },
+    { text: "", image: undefined as Blob | undefined, preview: "", alt: "" },
   ];
 
   let placeholders: string[] = ["", "", ""];
@@ -35,7 +34,6 @@
   $: placeholders = getRandomPlaceholders(3, $locale);
 
   let shareToBluesky = false; // Default OFF (safer side)
-  let shareToNagi = false;
   let rememberSettings = false;
   let submitting = false;
   let isLoaded = false;
@@ -55,7 +53,6 @@
       if (storedRemember) {
         shareToBluesky =
           localStorage.getItem("settings.shareToBluesky") === "true";
-        shareToNagi = localStorage.getItem("settings.shareToNagi") === "true";
       }
 
       // Load draft
@@ -100,10 +97,8 @@
     localStorage.setItem("settings.rememberShare", String(rememberSettings));
     if (rememberSettings) {
       localStorage.setItem("settings.shareToBluesky", String(shareToBluesky));
-      localStorage.setItem("settings.shareToNagi", String(shareToNagi));
     } else {
       localStorage.removeItem("settings.shareToBluesky");
-      localStorage.removeItem("settings.shareToNagi");
     }
 
     // Save Draft (Debouncing logic is natural via Svelte reactive block, but strictly it saves on every keystroke.
@@ -127,6 +122,7 @@
   function removeImage(index: number) {
     lines[index].image = undefined;
     lines[index].preview = "";
+    lines[index].alt = "";
     lines = lines;
   }
 
@@ -147,8 +143,8 @@
 
     try {
       const { shareErrors, linkError } = await createDiary(
-        lines.map((l) => ({ text: l.text, image: l.image })),
-        { bluesky: shareToBluesky, nagi: shareToNagi },
+        lines.map((l) => ({ text: l.text, image: l.image, alt: l.alt })),
+        { bluesky: shareToBluesky },
       );
 
       // The diary itself is saved; only report which crossposts failed
@@ -197,6 +193,13 @@
           err.error === "AuthenticationRequired"
         ) {
           errorMessage = "Session expired. Please sign in again.";
+        } else if (
+          err.status === 403 ||
+          /scope/i.test(err.error ?? "") ||
+          /scope/i.test(err.message ?? "")
+        ) {
+          // Sessions from before the com.suibari.trilinesat migration lack the new repo scope.
+          errorMessage = $t("editor.error_scope");
         } else if (err.status === 429) {
           errorMessage =
             "Rate limit exceeded. Please wait a moment before trying again.";
@@ -296,20 +299,6 @@
         <label class="flex items-center gap-1.5 cursor-pointer">
           <input
             type="checkbox"
-            bind:checked={shareToNagi}
-            class="form-checkbox h-4 w-4 text-fuchsia-500 rounded border-slate-500 bg-black/20 focus:ring-0 focus:ring-offset-0"
-          />
-          <a
-            href={`${NAGI_URL}/about`}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs text-slate-300 underline underline-offset-2 hover:text-white"
-            >Nagi</a
-          >
-        </label>
-        <label class="flex items-center gap-1.5 cursor-pointer">
-          <input
-            type="checkbox"
             bind:checked={rememberSettings}
             class="form-checkbox h-4 w-4 text-fuchsia-500 rounded border-slate-500 bg-black/20 focus:ring-0 focus:ring-offset-0"
           />
@@ -370,6 +359,14 @@
             <X size={12} />
           </button>
         </div>
+        <input
+          type="text"
+          bind:value={line.alt}
+          maxlength={1000}
+          placeholder={$t("editor.alt_placeholder")}
+          aria-label={$t("editor.alt_placeholder")}
+          class="mt-2 w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1 text-sm text-white placeholder-slate-500 focus:ring-0"
+        />
       {:else}
         <div
           class="absolute bottom-4 right-4 opacity-0 group-focus-within:opacity-100 transition-opacity"
@@ -417,26 +414,6 @@
       </label>
     </div>
 
-    <div class="flex items-center justify-between">
-      <a
-        href={`${NAGI_URL}/about`}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="text-sm font-medium text-slate-300 underline underline-offset-4 hover:text-white"
-        >{$t("editor.share_nagi")}</a
-      >
-      <label class="relative inline-flex items-center cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={shareToNagi}
-          aria-label={$t("editor.share_nagi")}
-          class="sr-only peer"
-        />
-        <div
-          class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"
-        ></div>
-      </label>
-    </div>
 
     <div class="flex items-center justify-end gap-2">
       <label class="flex items-center gap-2 cursor-pointer">

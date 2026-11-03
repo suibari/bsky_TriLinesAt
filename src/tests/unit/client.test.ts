@@ -12,8 +12,7 @@ vi.mock('@atproto/oauth-client-browser', () => ({
 
 import { createClient } from '$lib/auth/client';
 
-const LEGACY_SCOPE = 'atproto blob:*/* repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create';
-const NAGI_SCOPE = 'repo:com.suibari.nagi.post?action=create';
+const SCOPE = 'atproto blob:*/* repo:com.suibari.trilinesat.diary repo:com.suibari.trilinesat.like repo:blue.trilinesat.diary repo:blue.trilinesat.like repo:app.bsky.feed.post?action=create';
 
 async function metadataFor(hostname: string) {
   vi.stubGlobal('window', { location: { hostname } });
@@ -91,18 +90,20 @@ describe('createClient', () => {
       });
     });
 
-    it('既存のスコープをすべて保持していること', async () => {
-      const opts = await metadataFor('trilinesat.suibari.com');
-      expect(opts.clientMetadata.scope.startsWith(LEGACY_SCOPE)).toBe(true);
+    it('旧NSIDのスコープを、既存の日記の編集・削除のために保持していること', async () => {
+      const scopes = (await metadataFor('trilinesat.suibari.com')).clientMetadata.scope.split(' ');
+      expect(scopes).toContain('repo:blue.trilinesat.diary');
+      expect(scopes).toContain('repo:blue.trilinesat.like');
     });
   });
 
-  it('Nagi投稿のスコープを要求すること', async () => {
+  it('新NSIDのスコープを要求し、Nagi投稿のスコープは要求しないこと', async () => {
     const opts = await metadataFor('trilinesat.suibari.com');
-    expect(opts.clientMetadata.scope).toBe(`${LEGACY_SCOPE} ${NAGI_SCOPE}`);
+    expect(opts.clientMetadata.scope).toBe(SCOPE);
+    expect(opts.clientMetadata.scope).not.toContain('com.suibari.nagi.post');
 
     const local = await metadataFor('127.0.0.1');
-    expect(local.clientMetadata.client_id).toContain(`&scope=${encodeURIComponent(`${LEGACY_SCOPE} ${NAGI_SCOPE}`)}`);
+    expect(local.clientMetadata.client_id).toContain(`&scope=${encodeURIComponent(SCOPE)}`);
   });
 
   it.each([
