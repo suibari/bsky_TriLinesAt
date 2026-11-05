@@ -4,6 +4,7 @@
   import { getBlobUrl, likeEntry, unlikeEntry, getPostInteractionState, updateDiaryLines } from "$lib/bsky";
   import Avatar from "./Avatar.svelte";
   import { session } from "$lib/auth/session";
+  import { isPermissionError } from "$lib/auth/permissions";
   import { deleteRecord } from "$lib/bsky";
   import { createEventDispatcher, onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -167,7 +168,7 @@
       likes = originalLikes;
       likeAvatars = originalAvatars;
       myLikeUri = originalUri;
-      alert($t("card.action_failed"));
+      alert($t(isPermissionError(e) ? "auth.error_scope" : "card.action_failed"));
     } finally {
       likeLoading = false;
     }
